@@ -1,0 +1,79 @@
+import pandas as pd
+import numpy as np
+import math
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
+def read_train_data(data_fp, drop_vars):
+    '''Read data as a Dataframe, then drop condition columns and duplicate variables.'''
+    var_cols = list(range(5,26))
+    usecols = [0,1] + var_cols # Drop condition columns
+    dtype_dict = {_:'float32' for _ in var_cols} # Specify dtypes
+    dtype_dict[0] = dtype_dict[1] = 'int'
+    data = pd.read_csv(data_fp, usecols=usecols, dtype=dtype_dict, header=None, sep=r'\s+',)
+    columns = ['UUT','time'] + list(range(1,22)) # 21 measurements
+    data.columns = columns
+    if drop_vars is not None: # Filter variables
+        data.drop(drop_vars,axis=1,inplace=True)
+    data.sort_values(['UUT','time'],inplace=True) # Keep order
+    return data
+
+def get_scaler_by_type(scaler_type):
+    type2scaler = {
+        'Standard': StandardScaler(),
+        'MinMax': MinMaxScaler(),
+    }
+    scaler = type2scaler[scaler_type]
+    return scaler
+
+def scale_data(data, scaler, train = False):
+    if train:
+        scaler.fit(data)
+    return scaler.transform(data)
+
+def add_noise(data, noise_type = 'gaussian', noise_param = 0.1):
+    '''Add noise on raw data.
+    Input:
+        data: DataFrame with columns of 'UUT', 'time', var1, var2, ... ('label')
+    Output:
+        synthetic data
+    '''
+    var_cols = [col for col in data.columns if col not in ('UUT','time','label')]
+    if noise_type == 'gaussian': # Add Gaussian Noise
+        noise = (noise_param*np.random.randn(len(data),len(var_cols))).astype('float32')
+        newdata = data
+        newdata.loc[:,var_cols] += noise
+    elif noise_type == 'white gaussian': # Add White Gaussian Noise:
+        grouped = data.groupby('UUT')
+        newdata = []
+        for UUT,sample in grouped:
+            px_sqrt = np.sqrt(np.power(sample.loc[:,var_cols].values,2).mean(axis=0))
+            pn_sqrt = (px_sqrt*(10**(-noise_param/20.))).reshape(1,-1)
+            noise = (pn_sqrt*np.random.randn(len(sample),len(var_cols))).astype('float32')
+            sample.loc[:,var_cols] += noise
+            newdata.append(sample)
+        newdata = pd.concat(newdata)
+    return newdata
+
+def gen_cv_data(data,k_fold=5):
+    '''Generate Cross-Validation(cv) Data.'''
+    grouped = data.groupby('UUT')
+    fold_size = math.ceil(len(grouped)/k_fold)
+    all_UUTs = list(grouped.groups)
+    np.random.shuffle(all_UUTs)
+    for k in range(k_fold):
+        eval_UUTs = all_UUTs[k*fold_size:(k+1)*fold_size]
+        filter_bool = data['UUT'].isin(eval_UUTs)
+        train_data = data[~filter_bool]
+        val_data = data[filter_bool]
+        yield train_data, val_data
+
+def gen_loo_data(data,val_ratio=0.2):
+    '''Generate Leave-One_out(loo) Data.'''
+    grouped = data.groupby('UUT')
+    val_UUTs = np.random.choice(list(grouped.groups),
+            size=int(val_ratio*len(grouped)),
+        ) # stratified random sampling: p=grouped.size()/len(data)
+    filter_bool = data['UUT'].isin(val_UUTs)
+    train_data = data[~filter_bool]
+    val_data = data[filter_bool]
+    return train_data, val_data
