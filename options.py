@@ -11,13 +11,11 @@ def parse_common_args(parser):
     parser.add_argument('--Base_lstm_hidden_size', type=int, default=16)
     parser.add_argument('--Base_num_lstm_layers', type=int, default=1)
     parser.add_argument('--Base_lstm_dropout', type=float, default=0.0)
-    parser.add_argument('--Base_dnn_hidden_size_1', type=int, default=16)
-    parser.add_argument('--Base_dnn_hidden_size_2', type=int)
+    parser.add_argument('--Base_dnn_hidden_sizes', nargs='*', type=int, default=[16])
     parser.add_argument('--Base_activate', type=str, default='SigmoidExpBias', choices=['Sigmoid','SigmoidExpBias','SigmoidLinear','SigmoidLinearReLU','SigmoidLeakyReLU','SigmoidELU'])
     parser.add_argument('--Base_cls_thres', type=float, default=0.5)
         # SC
-    parser.add_argument('--SC_dnn_hidden_size_1', type=int, default=16)
-    parser.add_argument('--SC_dnn_hidden_size_2', type=int, default=16)
+    parser.add_argument('--SC_dnn_hidden_sizes', nargs='*', type=int, default=[16,16])
     
     # Data Preprocessing
     parser.add_argument('--drop_vars', nargs='*', type=int, default=[1,5,6,10,16,18,19], help='drop duplicate variables by index')
@@ -29,7 +27,7 @@ def parse_common_args(parser):
 
     # Dataset setting
     parser.add_argument('--data_type', type=str, default='Base', choices=['Base','TW','RTF','RTFTW'], help='"TW" for Time Window dataset, "RTF" for Run-To-Failure dataset')
-    parser.add_argument('--drop_failure', action='store_true', help='not output failure samples (not exclusive with -F)')
+    # parser.add_argument('--drop_failure', action='store_true', help='not output failure samples (not exclusive with -F)')
     parser.add_argument('-N', type=int, default=0, help='output N+1 consecutive samples')
     parser.add_argument('-F', action='store_true', help='include failure sample in each output')
     parser.add_argument('--window_width', type=int, default=15, help='Window width for TWDataset')

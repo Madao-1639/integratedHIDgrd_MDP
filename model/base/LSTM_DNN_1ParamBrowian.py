@@ -61,20 +61,14 @@ class LSTM_DNN_1ParamBrowian(nn.Module):
             args.input_size, args.Base_lstm_hidden_size, args.Base_num_lstm_layers,
             dropout=args.Base_lstm_dropout, batch_first=True
             )
-        if args.Base_dnn_hidden_size_2:
-            self.dnn = nn.Sequential(
-                nn.Linear(args.Base_lstm_hidden_size, args.Base_dnn_hidden_size_1),
-                nn.ReLU(),
-                nn.Linear(args.Base_dnn_hidden_size_1, args.Base_dnn_hidden_size_2),
-                nn.ReLU(),
-                nn.Linear(args.Base_dnn_hidden_size_2, 1),
-            )
-        else:
-            self.dnn = nn.Sequential(
-                nn.Linear(args.Base_lstm_hidden_size, args.Base_dnn_hidden_size_1),
-                nn.ReLU(),
-                nn.Linear(args.Base_dnn_hidden_size_1, 1),
-            )
+        dnn_seq = []
+        input_size = args.Base_lstm_hidden_size
+        for hidden_size in args.Base_dnn_hidden_sizes:
+            dnn_seq.extend([nn.Linear(input_size, hidden_size),nn.ReLU()])
+            input_size = hidden_size
+        dnn_seq.append(nn.Linear(input_size,1))
+        self.dnn = nn.Sequential(*dnn_seq)
+        
         if args.Base_activate == 'SigmoidExpBias':
             self.activate = SigmoidExpBias()
         elif args.Base_activate == 'SigmoidLinear':

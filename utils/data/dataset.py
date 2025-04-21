@@ -18,7 +18,7 @@ class BaseDataset(Dataset):
         self.grouped = grouped
         self.ls_dict = grouped['time'].max()
 
-        self.drop_failure = args.drop_failure
+        # self.drop_failure = args.drop_failure
         self.get_sample_indice()
 
     def get_label(self):
@@ -26,8 +26,6 @@ class BaseDataset(Dataset):
         if self.task == 'cls':
             def _assign_label(x):
                 if x == 0:
-                    return -1
-                elif x == 1:
                     return 1
                 elif x > 0:
                     return 0
@@ -36,12 +34,12 @@ class BaseDataset(Dataset):
             self.data = self.data.assign(label = failure_time-self.data['time'])
 
     def get_sample_indice(self):
-        if self.drop_failure:
-            if self.task == 'cls':
-                self.sample_indice = self.data[self.data['label']>=0].index
-            else:
-                self.sample_indice = self.data[self.data['label']>0].index
-        else:
+        # if self.drop_failure:
+        #     if self.task == 'cls':
+        #         self.sample_indice = self.data[self.data['label']>=0].index
+        #     else:
+        #         self.sample_indice = self.data[self.data['label']>0].index
+        # else:
             self.sample_indice = self.data.index
 
     def __getitem__(self, index):
@@ -61,9 +59,10 @@ class BaseDataset_ND(BaseDataset):
 
     def get_sample_indice(self):
         sample_indice = []
-        diff = int(self.drop_failure)
+        # diff = int(self.drop_failure)
         for UUT,group_indice in self.grouped.groups.items():
-            end_time = self.ls_dict[UUT] - diff
+            # end_time = self.ls_dict[UUT] - diff
+            end_time = self.ls_dict[UUT]
             sample_indice.extend(
                 (UUT,t,
                 *(group_indice[t-i] for i in range(self.N+1,0,-1)),
@@ -81,9 +80,8 @@ class BaseDataset_ND(BaseDataset):
 class BaseDataset_ND_F(BaseDataset_ND):
     def get_sample_indice(self):
         sample_indice = []
-        diff = int(self.drop_failure)
         for UUT,group_indice in self.grouped.groups.items():
-            end_time = self.ls_dict[UUT] - diff
+            end_time = self.ls_dict[UUT]
             sample_indice.extend(
                 (UUT,t,
                 *(group_indice[t-i] for i in range(self.N+1,0,-1)),
@@ -110,9 +108,8 @@ class TWDataset(BaseDataset):
         '''Create Time Windows(TW) of data.
         Return a list of (UUT,time,start_idx,end_idx) indicating a window.'''
         sample_indice = []
-        diff = int(self.drop_failure)
         for UUT,group_indice in self.grouped.groups.items():
-            end_time = self.ls_dict[UUT] - diff
+            end_time = self.ls_dict[UUT]
             sample_indice.extend(
                 (UUT,t,
                     group_indice[t-self.window_width:t], # Window indice.
@@ -135,9 +132,8 @@ class TWDataset_ND(TWDataset):
 
     def get_sample_indice(self):
         sample_indice = []
-        diff = int(self.drop_failure)
         for UUT,group_indice in self.grouped.groups.items():
-            end_time = self.ls_dict[UUT] - diff
+            end_time = self.ls_dict[UUT]
             sample_indice.extend(
                 (UUT,t,
                     *(group_indice[t-i-self.window_width:t-i]
@@ -156,9 +152,8 @@ class TWDataset_ND(TWDataset):
 class TWDataset_ND_F(TWDataset_ND):
     def get_sample_indice(self):
         sample_indice = []
-        diff = int(self.drop_failure)
         for UUT,group_indice in self.grouped.groups.items():
-            end_time = self.ls_dict[UUT] - diff
+            end_time = self.ls_dict[UUT]
             sample_indice.extend(
                 (UUT,t,
                     *(group_indice[t-i-self.window_width:t-i]
@@ -185,15 +180,13 @@ class RTFDataset(IterableDataset):
         self.grouped = grouped
         self.ls_dict = grouped['time'].max()
 
-        self.drop_failure = args.drop_failure
+        # self.drop_failure = args.drop_failure
 
     def get_label(self):
         failure_time = self.data.groupby('UUT')['time'].transform('max')
         if self.task == 'cls':
             def _assign_label(x):
                 if x == 0:
-                    return -1
-                elif x == 1:
                     return 1
                 elif x > 0:
                     return 0
@@ -202,9 +195,8 @@ class RTFDataset(IterableDataset):
             self.data = self.data.assign(label = failure_time-self.data['time'])
 
     def __iter__(self):
-        diff = int(self.drop_failure)
         for UUT, grouped_data in self.grouped:
-            end_time = self.ls_dict[UUT] - diff
+            end_time = self.ls_dict[UUT]
             grouped_data = grouped_data.iloc[:end_time]
             t = grouped_data['time']
             y = grouped_data['label']
@@ -219,9 +211,8 @@ class RTFTWDataset(RTFDataset):
         super().__init__(data, train, args)
 
     def __iter__(self):
-        diff = int(self.drop_failure)
         for UUT, grouped_data in self.grouped:
-            end_time = self.ls_dict[UUT] - diff
+            end_time = self.ls_dict[UUT]
             grouped_aux = grouped_data.iloc[self.window_width-1:end_time]
             t = grouped_aux['time']
             y = grouped_aux['label']

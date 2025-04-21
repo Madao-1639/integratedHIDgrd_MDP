@@ -10,12 +10,19 @@ from loss import MVFLoss,MONLoss,CONLoss
 class SC_DNN(nn.Module):
     def __init__(self,args):
         super().__init__()
-        self.dnn = nn.Sequential(
-            nn.Linear(args.input_size, args.SC_dnn_hidden_size_1),
-            nn.Tanh(),
-            nn.Linear(args.SC_dnn_hidden_size_1, args.SC_dnn_hidden_size_2),
-            nn.Linear(args.SC_dnn_hidden_size_2, 1),
-        )
+        dnn_seq = []
+        input_size = args.input_size
+        for hidden_size in args.SC_dnn_hidden_sizes:
+            dnn_seq.extend([nn.Linear(input_size, hidden_size),nn.ReLU()])
+            input_size = hidden_size
+        dnn_seq.append(nn.Linear(input_size,1))
+        self.dnn = nn.Sequential(*dnn_seq)
+        # self.dnn = nn.Sequential(
+        #     nn.Linear(args.input_size, args.SC_dnn_hidden_size_1),
+        #     nn.Tanh(),
+        #     nn.Linear(args.SC_dnn_hidden_size_1, args.SC_dnn_hidden_size_2),
+        #     nn.Linear(args.SC_dnn_hidden_size_2, 1),
+        # )
 
         # train_UUTs = ls_dict.index
         # self.train_UUT_dict = {UUT:i for i,UUT in enumerate(train_UUTs)}
