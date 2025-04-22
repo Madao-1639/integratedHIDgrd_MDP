@@ -50,5 +50,5 @@ def MONLoss(hi_pre,hi_cur,c=0,penalty_type='exp',reduction="none",):
 
 def CONLoss(hi_ppre,hi_pre,hi_cur,**mon_kwargs):
     d_pre = hi_ppre - hi_pre
-    d_cur = hi_pre - hi_pre
+    d_cur = hi_pre - hi_cur
     return MONLoss(d_pre,d_cur,**mon_kwargs)

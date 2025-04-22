@@ -70,5 +70,5 @@ def select_loader(data,train,args,data_type=None):
         
     else:
         loader = DataLoader(dataset, args.batch_size,
-            shuffle=True, num_workers=4, collate_fn=custom_collate_fn, pin_memory=True, drop_last=False)
+            shuffle=True, num_workers=args.num_workers, collate_fn=custom_collate_fn, pin_memory=True, drop_last=False)
     return loader

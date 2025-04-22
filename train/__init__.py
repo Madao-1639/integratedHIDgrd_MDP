@@ -1,5 +1,5 @@
 from .trainer import (
-    BaseTrainer,
+    BaseTWTrainer,
     SCTrainer,
 )
 

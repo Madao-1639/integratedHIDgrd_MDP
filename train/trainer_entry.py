@@ -1,12 +1,14 @@
-from .trainer import BaseTrainer,SCTrainer
+from .trainer import BaseTWTrainer,BaseRTFTrainer,SCTrainer
 from utils.preprocessing import read_train_data, get_scaler_by_type, scale_data, add_noise, gen_cv_data, gen_loo_data
 
 def select_trainer(args):
-    type2trainer ={
-        'Base': BaseTrainer,
-        'SC': SCTrainer,
-    }
-    Trainer = type2trainer[args.model_type]
+    if args.model_type == 'Base':
+        if args.data_type == 'TW':
+            Trainer = BaseTWTrainer
+        else:
+            Trainer = BaseRTFTrainer
+    elif args.model_type == 'SC':
+        Trainer = SCTrainer
 
     # Preprocess data
     data = read_train_data(args.train_fp,args.drop_vars)
@@ -37,11 +39,13 @@ def select_trainer(args):
 
 
 def select_trainer_NoiseAfterScale(args):
-    type2trainer ={
-        'Base': BaseTrainer,
-        'SC': SCTrainer,
-    }
-    Trainer = type2trainer[args.model_type]
+    if args.model_type == 'Base':
+        if args.data_type == 'TW':
+            Trainer = BaseTWTrainer
+        else:
+            Trainer = BaseRTFTrainer
+    elif args.model_type == 'SC':
+        Trainer = SCTrainer
 
     # Preprocess data
     data = read_train_data(args.train_fp,args.drop_vars)

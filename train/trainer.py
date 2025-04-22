@@ -1,5 +1,4 @@
 import torch
-from torch.utils.data import DataLoader
 from torch import nn
 from torch.optim import Adam
 
@@ -9,16 +8,15 @@ import matplotlib.pyplot as plt
 from scipy.stats import kstest,shapiro,normaltest,anderson
 from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score
 
-from utils.data import BaseDataset_ND_F,TWDataset_ND, RTFTWDataset,RTFDataset,custom_collate_fn,custom_RTF_collate_fn,select_loader
-from model import LSTM_DNN_1ParamBrowian as BaseModel
-from model import SC_DNN
+from utils.data import select_loader
+from model import BaseTW, BaseRTF, SC_DNN
 from loss import FocalLoss,MVFLoss,MONLoss,CONLoss
 from utils.logger import Logger
 
 from sklearn.linear_model import LogisticRegression
 
-class BaseTrainer:
-    '''Train Base Model'''
+class BaseTWTrainer:
+    '''Train BaseTW Model'''
     def __init__(self,args,train_data,val_data=None,**logger_kwargs):
         self.args = args
         self.logger = Logger(args,**logger_kwargs)
@@ -30,7 +28,8 @@ class BaseTrainer:
 
         self.get_loader(train_data,val_data)
         self.get_model()
-        self.get_loss_wa_coef()
+        if args.loss_wa:
+            self.get_loss_wa_coef()
         self.get_optimizer()
 
     def get_loader(self,train_data,val_data):
@@ -64,7 +63,7 @@ class BaseTrainer:
             self.record_HI_loader = None
 
     def get_model(self):
-        self.model = BaseModel(self.args, self.train_loader.dataset.ls_dict.index)
+        self.model = BaseTW(self.args, self.train_loader.dataset.ls_dict.index)
         if self.args.load_model_fp:
             self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
         self.model.to(self.device)
@@ -167,7 +166,7 @@ class BaseTrainer:
 
         hi_dict = {}
         # Test for normality
-        sig_list = (0.01,0.05,0.10)
+        sig_list = sorted((0.01,0.05,0.10))
         nt_summary = {} # 'epoch':epoch
         for UUT,t,X,y_true in self.record_HI_loader:
             X = X.to(self.device)
@@ -190,11 +189,15 @@ class BaseTrainer:
                         statistic = test_result.statistic
                         if statistic < critical_value:
                             nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                        else:
+                            break
                 else:
+                    statistic, p_value = test_result
                     for sig in sig_list:
-                        statistic, p_value = test_result
                         if p_value > sig:
                             nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                        else:
+                            break
         for k,v in nt_summary.items():
             self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
 
@@ -210,13 +213,17 @@ class BaseTrainer:
             self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
 
     def compute_loss(self, hi_pre, hi_cur, p, y_true, UUT):
-        indice = self._UUT2idx(UUT)
-        loss_wa_coef = self.loss_wa_coef[indice]
+        if self.args.loss_wa:
+            indice = self._UUT2idx(UUT)
+            loss_wa_coef = self.loss_wa_coef[indice]
         
-        cls_loss = self.args.cls_loss_weight * (loss_wa_coef@FocalLoss(p, y_true, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='none'))
-        mfe_loss = self.args.mfe_loss_weight * (loss_wa_coef@self.model.mfe_loss(hi_pre, hi_cur, UUT, reduction = 'none'))
-        total_loss = cls_loss + mfe_loss
+            cls_loss = self.args.cls_loss_weight * (loss_wa_coef@FocalLoss(p, y_true, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='none'))
+            mfe_loss = self.args.mfe_loss_weight * (loss_wa_coef@self.model.mfe_loss(hi_pre, hi_cur, UUT, reduction = 'none'))
+        else:
+            cls_loss = self.args.cls_loss_weight * FocalLoss(p, y_true, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='mean')
+            mfe_loss = self.args.mfe_loss_weight * self.model.mfe_loss(hi_pre, hi_cur, UUT, reduction = 'mean')
 
+        total_loss = cls_loss + mfe_loss
         loss = {
             'cls_loss': cls_loss,
             'mfe_loss': mfe_loss,
@@ -226,7 +233,108 @@ class BaseTrainer:
 
 
 
-class SCTrainer(BaseTrainer):
+class BaseRTFTrainer(BaseTWTrainer):
+    def get_model(self):
+        self.model = BaseRTF(self.args, self.train_loader.dataset.ls_dict.index)
+        if self.args.load_model_fp:
+            self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
+        self.model.to(self.device)
+        # example_input = torch.randn((self.args.input_size,20))
+        # self.logger.writer.add_graph(self.model,example_input)
+
+    def train_per_epoch(self, epoch):
+        # Switch to train mode
+        self.model.train()
+
+        for i, (UUT, t, X, y_true) in enumerate(self.train_loader):
+            X = X.to(self.device)
+            y_true = y_true.to(self.device)
+
+            hi, p = self.model(X)
+
+            # Compute loss
+            loss = self.compute_loss(hi, p, y_true, UUT)
+
+            # Get the item for backward
+            total_loss = loss['total_loss']
+
+            # Compute gradient and do Adam step
+            self.optimizer.zero_grad()
+            total_loss.backward()
+            self.optimizer.step()
+
+            # Logger record loss
+            for k,v in loss.items():
+                self.logger.record_scalars('Loss/train', k, v)
+
+            # Monitor training progress
+            if (i+1) % self.args.print_freq == 0:
+                print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
+
+    def record_per_epoch(self,epoch):
+        self.model.eval()
+
+        hi_dict = {}
+        # Test for normality
+        sig_list = sorted((0.01,0.05,0.10))
+        nt_summary = {} # 'epoch':epoch
+        for UUT,t,X,y_true in self.record_HI_loader:
+            X = X.to(self.device)
+            hi,p = self.model(X)
+            hi = hi.detach().numpy()
+            hi_dict[UUT] = hi
+
+            resInc = np.diff(hi,prepend=0)[10:]
+            nt_result = {
+                'KS': kstest(resInc,cdf='norm'),
+                'SW': shapiro(resInc),
+                'DP': normaltest(resInc),
+                'AD': anderson(resInc,dist='norm')
+            }
+            for test_name, test_result in nt_result.items():
+                if test_name == 'AD':
+                    for sig in sig_list:
+                        ad_idx = np.where(test_result.significance_level==sig*100)[0][0]
+                        critical_value = test_result.critical_values[ad_idx]
+                        statistic = test_result.statistic
+                        if statistic < critical_value:
+                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                        else:
+                            break
+                else:
+                    statistic, p_value = test_result
+                    for sig in sig_list:
+                        if p_value > sig:
+                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                        else:
+                            break
+        for k,v in nt_summary.items():
+            self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
+
+        # Plot selected HI
+        if epoch % self.args.record_freq == 0:
+            fig = plt.figure(figsize=(10,5))
+            for UUT in self.record_UUTs:
+                hi = hi_dict[UUT]
+                plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
+            plt.legend()
+            # plt.title(f'epoch:{epoch}')
+            plt.tight_layout()
+            self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
+
+    def compute_loss(self, hi, p, y_true, UUT):
+        cls_loss = self.args.cls_loss_weight * FocalLoss(p, y_true, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='mean')
+        mfe_loss = self.args.mfe_loss_weight * self.model.mfe_loss(hi, UUT, reduction = 'mean')
+
+        total_loss = cls_loss + mfe_loss
+        loss = {
+            'cls_loss': cls_loss,
+            'mfe_loss': mfe_loss,
+            'total_loss': total_loss
+        }
+        return loss
+
+class SCTrainer(BaseTWTrainer):
     def get_model(self):
         self.model = SC_DNN(self.args)
         if self.args.load_model_fp:

@@ -52,18 +52,20 @@ def parse_train_args(parser):
     parser.add_argument('--record_freq', type=int, default=5)
 
     parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--num_epoch', type=int, default=200)
     parser.add_argument('--print_freq', type=int, default=10)
 
     # Optimizer setting
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
-    parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
-                        help='momentum for sgd, alpha parameter for adam')
-    parser.add_argument('--beta', default=0.999, type=float, metavar='M',
-                        help='beta parameters for adam')
-    parser.add_argument('--weight_decay', '--wd', default=0.0, type=float, metavar='W', help='weight decay')
+    # parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
+    #                     help='momentum for sgd, alpha parameter for adam')
+    # parser.add_argument('--beta', default=0.999, type=float, metavar='M',
+    #                     help='beta parameters for adam')
+    parser.add_argument('--weight_decay', '--wd', default=0.0, type=float, metavar='W')
 
     # Loss
+    parser.add_argument('--loss_wa', action='store_true')
     parser.add_argument('--cls_loss_weight', type=float, default=1.0)
     parser.add_argument('--mfe_loss_weight', type=float, default=0.05)
     parser.add_argument('--mvf_loss_weight', type=float, default=1.0)

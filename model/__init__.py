@@ -1,2 +1,2 @@
-from .base.LSTM_DNN_1ParamBrowian import LSTM_DNN_1ParamBrowian
+from .base.LSTM_DNN_1ParamBrowian import BaseTW, BaseRTF
 from .li2021shapeconstrained.SC_DNN import SC_DNN

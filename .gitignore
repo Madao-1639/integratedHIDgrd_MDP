@@ -2,6 +2,8 @@
 *.bat
 *.ipynb
 *.py[cod]
+*.xlsx
+*.csv
 
 .history/
 .vscode/
