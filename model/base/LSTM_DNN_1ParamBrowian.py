@@ -5,7 +5,7 @@ from .CustomActvateFunction import select_activate
 
 
 class BaseTW(nn.Module):
-    def __init__(self, args, train_UUTs, mu0=1, sigma0=1):
+    def __init__(self, args, train_UUTs, mu0=1, sigma0=1, sigma_square=1):
         super().__init__()
         self.lstm = nn.LSTM(
             args.input_size, args.Base_lstm_hidden_size, args.Base_num_lstm_layers,
@@ -24,6 +24,7 @@ class BaseTW(nn.Module):
         # 1ParamBrownian
         self.train_UUT_dict = {UUT:i for i,UUT in enumerate(train_UUTs)}
         self.theta_train = nn.Parameter(torch.empty(len(train_UUTs)).normal_(mu0,sigma0))
+        self.sigma_square = nn.Parameter(torch.FloatTensor([sigma_square]))
 
     def forward(self,x,hidden=None):
         '''Input: x (batch_size, window_width, in_features)
@@ -52,7 +53,7 @@ class BaseTW(nn.Module):
         # Calculate Model Fitting Error(MFE) loss by MLE
         indice = self._UUT2idx(UUT)
         theta = self.theta_train[indice]
-        loss = torch.square(hi_cur - hi_pre - theta)
+        loss = torch.log(self.sigma_square) + torch.square(hi_cur - hi_pre - theta)/self.sigma_square
         if reduction == 'none':
             return loss
         elif reduction == 'sum':
@@ -65,9 +66,9 @@ class BaseTW(nn.Module):
         )
 
 class BaseRTF(BaseTW):
-    def __init__(self, args, train_UUTs, mu0=1, sigma0=1, sigma_square=1):
-        super().__init__(args, train_UUTs, mu0, sigma0)
-        self.sigma_square = nn.Parameter(torch.FloatTensor([sigma_square]))
+    # def __init__(self, args, train_UUTs, mu0=1, sigma0=1, sigma_square=1):
+    #     super().__init__(args, train_UUTs, mu0, sigma0)
+    #     self.sigma_square = nn.Parameter(torch.FloatTensor([sigma_square]))
 
     def forward(self,x,hidden=None):
         lstm_output, (h,c) = self.lstm(x,hidden)

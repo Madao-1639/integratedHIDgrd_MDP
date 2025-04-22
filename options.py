@@ -21,7 +21,7 @@ def parse_common_args(parser):
     parser.add_argument('--drop_vars', nargs='*', type=int, default=[1,5,6,10,16,18,19], help='drop duplicate variables by index')
     parser.add_argument('--scaler_type', type=str, default='Standard', choices=['Standard','MinMax'],)
     parser.add_argument('--add_noise', action='store_true')
-    parser.add_argument('--NoiseAfterScale', action='store_true')
+    # parser.add_argument('--NoiseAfterScale', action='store_true')
     parser.add_argument('--noise_type', type=str, default='gaussian', choices=['gaussian','white gaussian'])
     parser.add_argument('--noise_param', type=int, default=0.1, help='std in gaussian, snr in white gaussian')
 
@@ -29,7 +29,7 @@ def parse_common_args(parser):
     parser.add_argument('--data_type', type=str, default='Base', choices=['Base','TW','RTF','RTFTW'], help='"TW" for Time Window dataset, "RTF" for Run-To-Failure dataset')
     # parser.add_argument('--drop_failure', action='store_true', help='not output failure samples (not exclusive with -F)')
     parser.add_argument('-N', type=int, default=0, help='output N+1 consecutive samples')
-    parser.add_argument('-F', action='store_true', help='include failure sample in each output')
+    # parser.add_argument('-F', action='store_true', help='include failure sample in each output')
     parser.add_argument('--window_width', type=int, default=15, help='Window width for TWDataset')
 
     # I/O
@@ -62,10 +62,9 @@ def parse_train_args(parser):
     #                     help='momentum for sgd, alpha parameter for adam')
     # parser.add_argument('--beta', default=0.999, type=float, metavar='M',
     #                     help='beta parameters for adam')
-    parser.add_argument('--weight_decay', '--wd', default=0.0, type=float, metavar='W')
+    parser.add_argument('--weight_decay', default=0.0, type=float, metavar='W')
 
     # Loss
-    parser.add_argument('--loss_wa', action='store_true')
     parser.add_argument('--cls_loss_weight', type=float, default=1.0)
     parser.add_argument('--mfe_loss_weight', type=float, default=0.05)
     parser.add_argument('--mvf_loss_weight', type=float, default=1.0)

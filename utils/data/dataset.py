@@ -6,7 +6,6 @@ class BaseDataset(Dataset):
         ''' Base `Dataset` class for CMAPSS FD001 Dataset.
         Input a Dataframe with columns ('UUT','time',...variables).'''
         super().__init__()
-        # self.data = data.copy()
         self.data = data
         self.train = train
         self.var_columns = self.data.columns[2:]
@@ -18,7 +17,6 @@ class BaseDataset(Dataset):
         self.grouped = grouped
         self.ls_dict = grouped['time'].max()
 
-        # self.drop_failure = args.drop_failure
         self.get_sample_indice()
 
     def get_label(self):
@@ -34,17 +32,11 @@ class BaseDataset(Dataset):
             self.data = self.data.assign(label = failure_time-self.data['time'])
 
     def get_sample_indice(self):
-        # if self.drop_failure:
-        #     if self.task == 'cls':
-        #         self.sample_indice = self.data[self.data['label']>=0].index
-        #     else:
-        #         self.sample_indice = self.data[self.data['label']>0].index
-        # else:
-            self.sample_indice = self.data.index
+        self.sample_indice = self.data.index
 
     def __getitem__(self, index):
-        idx = self.sample_indice(index)
-        UUT, t, *data, y = self.data.loc[[idx]]
+        idx = self.sample_indice[index]
+        UUT, t, *data, y = self.data.loc[idx]
         return UUT, t, data, y
 
     def __len__(self):
@@ -59,37 +51,36 @@ class BaseDataset_ND(BaseDataset):
 
     def get_sample_indice(self):
         sample_indice = []
-        # diff = int(self.drop_failure)
         for UUT,group_indice in self.grouped.groups.items():
-            # end_time = self.ls_dict[UUT] - diff
             end_time = self.ls_dict[UUT]
             sample_indice.extend(
-                (UUT,t,
-                *(group_indice[t-i] for i in range(self.N+1,0,-1)),
-                self.data.loc[group_indice[t-1],'label']    # Label for current time.
+                (t==self.N+1, t==end_time, # Start flag & End flag
+                UUT,t,
+                list(group_indice[t-i] for i in range(self.N+1,0,-1)),
+                self.data.loc[group_indice[t-self.N-1:t],'label'].values    # Label for current time.
                 ) for t in range(self.N+1,end_time+1)
             )
         self.sample_indice = sample_indice
 
     def __getitem__(self, index):        
-        UUT, t, *indice, y = self.sample_indice[index]
-        return UUT, t, *(self.data.loc[idx,self.var_columns].astype('float32') for idx in indice), y
+        start, end, UUT, t, indice, y = self.sample_indice[index]
+        return start, end, UUT, t, (self.data.loc[idx,self.var_columns].values for idx in indice), y
 
 
 
-class BaseDataset_ND_F(BaseDataset_ND):
-    def get_sample_indice(self):
-        sample_indice = []
-        for UUT,group_indice in self.grouped.groups.items():
-            end_time = self.ls_dict[UUT]
-            sample_indice.extend(
-                (UUT,t,
-                *(group_indice[t-i] for i in range(self.N+1,0,-1)),
-                group_indice[-1],
-                self.data.loc[group_indice[t-1],'label']
-                ) for t in range(self.N+1,end_time+1)
-            )
-        self.sample_indice = sample_indice
+# class BaseDataset_ND_F(BaseDataset_ND):
+#     def get_sample_indice(self):
+#         sample_indice = []
+#         for UUT,group_indice in self.grouped.groups.items():
+#             end_time = self.ls_dict[UUT]
+#             sample_indice.extend(
+#                 (UUT,t,
+#                 *(group_indice[t-i] for i in range(self.N+1,0,-1)),
+#                 group_indice[-1],
+#                 self.data.loc[group_indice[t-1],'label']
+#                 ) for t in range(self.N+1,end_time+1)
+#             )
+#         self.sample_indice = sample_indice
 
 
 
@@ -120,7 +111,7 @@ class TWDataset(BaseDataset):
     
     def __getitem__(self, index):
         UUT, t, indice, y =  self.sample_indice[index]
-        data = self.data.loc[indice,self.var_columns]  # Current window
+        data = self.data.loc[indice,self.var_columns].values  # Current window
         return UUT, t, data, y
 
 
@@ -135,34 +126,36 @@ class TWDataset_ND(TWDataset):
         for UUT,group_indice in self.grouped.groups.items():
             end_time = self.ls_dict[UUT]
             sample_indice.extend(
-                (UUT,t,
-                    *(group_indice[t-i-self.window_width:t-i]
+                (
+                    t==self.window_width+self.N, t==end_time,
+                    UUT,t,
+                    list(group_indice[t-i-self.window_width:t-i]
                     for i in range(self.N,-1,-1)),
-                    self.data.loc[group_indice[t-1],'label']
+                    self.data.loc[group_indice[t-self.N-1:t],'label'].values
                 ) for t in range(self.window_width+self.N,end_time+1)
             )
         self.sample_indice = sample_indice
 
     def __getitem__(self, index):        
-        UUT, t, *indice_tuple, y = self.sample_indice[index]
-        return UUT, t, *(self.data.loc[indice,self.var_columns] for indice in indice_tuple), y
+        start, end, UUT, t, indice_tuple, y = self.sample_indice[index]
+        return start, end, UUT, t, (self.data.loc[indice,self.var_columns].values for indice in indice_tuple), y
 
 
 
-class TWDataset_ND_F(TWDataset_ND):
-    def get_sample_indice(self):
-        sample_indice = []
-        for UUT,group_indice in self.grouped.groups.items():
-            end_time = self.ls_dict[UUT]
-            sample_indice.extend(
-                (UUT,t,
-                    *(group_indice[t-i-self.window_width:t-i]
-                    for i in range(self.N,-1,-1)),
-                    group_indice[-self.window_width:], # Failure window indice.
-                    self.data.loc[group_indice[t-1],'label']
-                ) for t in range(self.window_width+self.N,end_time+1)
-            )
-        self.sample_indice = sample_indice
+# class TWDataset_ND_F(TWDataset_ND):
+#     def get_sample_indice(self):
+#         sample_indice = []
+#         for UUT,group_indice in self.grouped.groups.items():
+#             end_time = self.ls_dict[UUT]
+#             sample_indice.extend(
+#                 (UUT,t,
+#                     *(group_indice[t-i-self.window_width:t-i]
+#                     for i in range(self.N,-1,-1)),
+#                     group_indice[-self.window_width:], # Failure window indice.
+#                     self.data.loc[group_indice[t-1],'label']
+#                 ) for t in range(self.window_width+self.N,end_time+1)
+#             )
+#         self.sample_indice = sample_indice
 
 
 
@@ -180,8 +173,6 @@ class RTFDataset(IterableDataset):
         self.grouped = grouped
         self.ls_dict = grouped['time'].max()
 
-        # self.drop_failure = args.drop_failure
-
     def get_label(self):
         failure_time = self.data.groupby('UUT')['time'].transform('max')
         if self.task == 'cls':
@@ -198,9 +189,9 @@ class RTFDataset(IterableDataset):
         for UUT, grouped_data in self.grouped:
             end_time = self.ls_dict[UUT]
             grouped_data = grouped_data.iloc[:end_time]
-            t = grouped_data['time']
-            y = grouped_data['label']
-            data = grouped_data[self.var_columns]
+            t = grouped_data['time'].values
+            y = grouped_data['label'].values
+            data = grouped_data[self.var_columns].values
             yield UUT, t, data, y
 
 
@@ -214,10 +205,10 @@ class RTFTWDataset(RTFDataset):
         for UUT, grouped_data in self.grouped:
             end_time = self.ls_dict[UUT]
             grouped_aux = grouped_data.iloc[self.window_width-1:end_time]
-            t = grouped_aux['time']
-            y = grouped_aux['label']
+            t = grouped_aux['time'].values
+            y = grouped_aux['label'].values
             data = []
             for window_time in range(self.window_width,end_time+1):
-                window_data = grouped_data.iloc[window_time-self.window_width:window_time,2:-1]
+                window_data = grouped_data.iloc[window_time-self.window_width:window_time,2:-1].values
                 data.append(window_data)
             yield UUT, t, data, y

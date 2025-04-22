@@ -15,7 +15,7 @@ from utils.logger import Logger
 
 from sklearn.linear_model import LogisticRegression
 
-class BaseTWTrainer:
+class BaseRTFTrainer:
     '''Train BaseTW Model'''
     def __init__(self,args,train_data,val_data=None,**logger_kwargs):
         self.args = args
@@ -28,8 +28,6 @@ class BaseTWTrainer:
 
         self.get_loader(train_data,val_data)
         self.get_model()
-        if args.loss_wa:
-            self.get_loss_wa_coef()
         self.get_optimizer()
 
     def get_loader(self,train_data,val_data):
@@ -63,23 +61,12 @@ class BaseTWTrainer:
             self.record_HI_loader = None
 
     def get_model(self):
-        self.model = BaseTW(self.args, self.train_loader.dataset.ls_dict.index)
+        self.model = BaseRTF(self.args, self.train_loader.dataset.ls_dict.index)
         if self.args.load_model_fp:
             self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
         self.model.to(self.device)
-        # example_input = torch.randn((self.args.window_width,self.args.input_size,))
+        # example_input = torch.randn((self.args.input_size,20))
         # self.logger.writer.add_graph(self.model,example_input)
-
-    def get_loss_wa_coef(self):
-        # Coefficients of Weighted-Average(WA) of loss for each UUT.
-        self.train_UUT_dict = {UUT:i for i,UUT in enumerate(self.ls_dict.index)}
-        self.loss_wa_coef = torch.FloatTensor(1/(self.ls_dict.values-self.args.window_width-self.args.N))
-
-    def _UUT2idx(self,UUT):
-        if hasattr(UUT,'__getitem__'): # The passed UUT is a sequence
-            return [self.train_UUT_dict[_] for _ in UUT]
-        else:
-            return self.train_UUT_dict[UUT]
 
     def get_optimizer(self):
         no_decay_pg, decay_pg = [], []
@@ -110,16 +97,14 @@ class BaseTWTrainer:
         # Switch to train mode
         self.model.train()
 
-        for i, (UUT, t, X_pre, X_cur, y_true) in enumerate(self.train_loader):
-            X_pre = X_pre.to(self.device)
-            X_cur = X_cur.to(self.device)
+        for i, (UUT, t, X, y_true) in enumerate(self.train_loader):
+            X = X.to(self.device)
             y_true = y_true.to(self.device)
 
-            hi_pre, _ = self.model(X_pre)
-            hi_cur, p = self.model(X_cur)
+            hi, p = self.model(X)
 
             # Compute loss
-            loss = self.compute_loss(hi_pre, hi_cur, p, y_true, UUT)
+            loss = self.compute_loss(hi, p, y_true, UUT)
 
             # Get the item for backward
             total_loss = loss['total_loss']
@@ -148,7 +133,7 @@ class BaseTWTrainer:
         }
         all_y_true = []
         all_y_pred = []
-        for UUT,t,X,y_true in self.record_HI_loader:
+        for UUT,t,X,y_true in self.val_loader:
             X = X.to(self.device)
             y_pred = self.model.predict(X)
             all_y_true.append(y_true)
@@ -159,119 +144,9 @@ class BaseTWTrainer:
             metric = metric_fun(all_y_true,all_y_pred)
             self.logger.writer.add_scalar(f'{metric_name}/val',metric,epoch)
 
+    def record_per_epoch(self,epoch):
         self.logger.record_histogram('theta/train',self.model.theta_train)
 
-    def record_per_epoch(self,epoch):
-        self.model.eval()
-
-        hi_dict = {}
-        # Test for normality
-        sig_list = sorted((0.01,0.05,0.10))
-        nt_summary = {} # 'epoch':epoch
-        for UUT,t,X,y_true in self.record_HI_loader:
-            X = X.to(self.device)
-            hi,p = self.model(X)
-            hi = hi.detach().numpy()
-            hi_dict[UUT] = hi
-
-            resInc = np.diff(hi)
-            nt_result = {
-                'KS': kstest(resInc,cdf='norm'),
-                'SW': shapiro(resInc),
-                'DP': normaltest(resInc),
-                'AD': anderson(resInc,dist='norm')
-            }
-            for test_name, test_result in nt_result.items():
-                if test_name == 'AD':
-                    for sig in sig_list:
-                        ad_idx = np.where(test_result.significance_level==sig*100)[0][0]
-                        critical_value = test_result.critical_values[ad_idx]
-                        statistic = test_result.statistic
-                        if statistic < critical_value:
-                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                        else:
-                            break
-                else:
-                    statistic, p_value = test_result
-                    for sig in sig_list:
-                        if p_value > sig:
-                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                        else:
-                            break
-        for k,v in nt_summary.items():
-            self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
-
-        # Plot selected HI
-        if epoch % self.args.record_freq == 0:
-            fig = plt.figure(figsize=(10,5))
-            for UUT in self.record_UUTs:
-                hi = hi_dict[UUT]
-                plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
-            plt.legend()
-            # plt.title(f'epoch:{epoch}')
-            plt.tight_layout()
-            self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
-
-    def compute_loss(self, hi_pre, hi_cur, p, y_true, UUT):
-        if self.args.loss_wa:
-            indice = self._UUT2idx(UUT)
-            loss_wa_coef = self.loss_wa_coef[indice]
-        
-            cls_loss = self.args.cls_loss_weight * (loss_wa_coef@FocalLoss(p, y_true, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='none'))
-            mfe_loss = self.args.mfe_loss_weight * (loss_wa_coef@self.model.mfe_loss(hi_pre, hi_cur, UUT, reduction = 'none'))
-        else:
-            cls_loss = self.args.cls_loss_weight * FocalLoss(p, y_true, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='mean')
-            mfe_loss = self.args.mfe_loss_weight * self.model.mfe_loss(hi_pre, hi_cur, UUT, reduction = 'mean')
-
-        total_loss = cls_loss + mfe_loss
-        loss = {
-            'cls_loss': cls_loss,
-            'mfe_loss': mfe_loss,
-            'total_loss': total_loss
-        }
-        return loss
-
-
-
-class BaseRTFTrainer(BaseTWTrainer):
-    def get_model(self):
-        self.model = BaseRTF(self.args, self.train_loader.dataset.ls_dict.index)
-        if self.args.load_model_fp:
-            self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
-        self.model.to(self.device)
-        # example_input = torch.randn((self.args.input_size,20))
-        # self.logger.writer.add_graph(self.model,example_input)
-
-    def train_per_epoch(self, epoch):
-        # Switch to train mode
-        self.model.train()
-
-        for i, (UUT, t, X, y_true) in enumerate(self.train_loader):
-            X = X.to(self.device)
-            y_true = y_true.to(self.device)
-
-            hi, p = self.model(X)
-
-            # Compute loss
-            loss = self.compute_loss(hi, p, y_true, UUT)
-
-            # Get the item for backward
-            total_loss = loss['total_loss']
-
-            # Compute gradient and do Adam step
-            self.optimizer.zero_grad()
-            total_loss.backward()
-            self.optimizer.step()
-
-            # Logger record loss
-            for k,v in loss.items():
-                self.logger.record_scalars('Loss/train', k, v)
-
-            # Monitor training progress
-            if (i+1) % self.args.print_freq == 0:
-                print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
-
-    def record_per_epoch(self,epoch):
         self.model.eval()
 
         hi_dict = {}
@@ -334,40 +209,47 @@ class BaseRTFTrainer(BaseTWTrainer):
         }
         return loss
 
-class SCTrainer(BaseTWTrainer):
+class BaseTWTrainer(BaseRTFTrainer):
+    '''Train BaseTW Model'''
+    def __init__(self,args,train_data,val_data=None,**logger_kwargs):
+        super().__init__(args,train_data,val_data,**logger_kwargs)
+        self.get_loss_wa_coef()
+
     def get_model(self):
-        self.model = SC_DNN(self.args)
+        self.model = BaseTW(self.args, self.train_loader.dataset.ls_dict.index)
         if self.args.load_model_fp:
             self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
         self.model.to(self.device)
-        example_input = torch.randn((self.args.input_size,))
-        self.logger.writer.add_graph(self.model,example_input)
+        # example_input = torch.randn((self.args.window_width,self.args.input_size,))
+        # self.logger.writer.add_graph(self.model,example_input)
 
     def get_loss_wa_coef(self):
         # Coefficients of Weighted-Average(WA) of loss for each UUT.
         self.train_UUT_dict = {UUT:i for i,UUT in enumerate(self.ls_dict.index)}
-        self.loss_wa_coef = torch.FloatTensor(1/(self.ls_dict.values-self.args.N))
+        self.cls_loss_wa_coef = torch.FloatTensor(1/(self.ls_dict.values-self.args.window_width+1))
+        self.mfe_loss_wa_coef = torch.FloatTensor(1/(self.ls_dict.values-self.args.window_width))
+
+    def _UUT2idx(self,UUT):
+        if hasattr(UUT,'__getitem__'): # The passed UUT is a sequence
+            return [self.train_UUT_dict[_] for _ in UUT]
+        else:
+            return self.train_UUT_dict[UUT]
 
     def train_per_epoch(self, epoch):
         # Switch to train mode
         self.model.train()
 
-        all_y_true = []
-        all_hi = []
-        for i, (UUT, t, X_ppre, X_pre, X_cur, X_f, y_true) in enumerate(self.train_loader):
-            X_ppre = X_ppre.to(self.device)
+        for i, (start, end, UUT, t, (X_pre, X_cur), (y_pre, y_cur)) in enumerate(self.train_loader):
             X_pre = X_pre.to(self.device)
             X_cur = X_cur.to(self.device)
-            X_f = X_f.to(self.device)
-            y_true = y_true.to(self.device)
+            y_pre = y_pre.to(self.device)
+            y_cur = y_cur.to(self.device)
 
-            hi_ppre = self.model(X_ppre)
-            hi_pre = self.model(X_pre)
-            hi_cur = self.model(X_cur)
-            hi_f = self.model(X_f)
+            hi_pre, p_pre = self.model(X_pre)
+            hi_cur, p_cur = self.model(X_cur)
 
             # Compute loss
-            loss = self.compute_loss(hi_ppre, hi_pre, hi_cur, hi_f, UUT)
+            loss = self.compute_loss(start, end, hi_pre, hi_cur, p_pre, p_cur, y_pre, y_cur, UUT)
 
             # Get the item for backward
             total_loss = loss['total_loss']
@@ -377,20 +259,136 @@ class SCTrainer(BaseTWTrainer):
             total_loss.backward()
             self.optimizer.step()
 
-            # Logger record
+            # Logger record loss
             for k,v in loss.items():
                 self.logger.record_scalars('Loss/train', k, v)
 
             # Monitor training progress
             if (i+1) % self.args.print_freq == 0:
                 print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
+
+    def record_per_epoch(self,epoch):
+        self.model.eval()
+
+        hi_dict = {}
+        # Test for normality
+        sig_list = sorted((0.01,0.05,0.10))
+        nt_summary = {} # 'epoch':epoch
+        for UUT,t,X,y_true in self.record_HI_loader:
+            X = X.to(self.device)
+            hi,p = self.model(X)
+            hi = hi.detach().numpy()
+            hi_dict[UUT] = hi
+
+            resInc = np.diff(hi)
+            nt_result = {
+                'KS': kstest(resInc,cdf='norm'),
+                'SW': shapiro(resInc),
+                'DP': normaltest(resInc),
+                'AD': anderson(resInc,dist='norm')
+            }
+            for test_name, test_result in nt_result.items():
+                if test_name == 'AD':
+                    for sig in sig_list:
+                        ad_idx = np.where(test_result.significance_level==sig*100)[0][0]
+                        critical_value = test_result.critical_values[ad_idx]
+                        statistic = test_result.statistic
+                        if statistic < critical_value:
+                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                        else:
+                            break
+                else:
+                    statistic, p_value = test_result
+                    for sig in sig_list:
+                        if p_value > sig:
+                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                        else:
+                            break
+        for k,v in nt_summary.items():
+            self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
+
+        # Plot selected HI
+        if epoch % self.args.record_freq == 0:
+            fig = plt.figure(figsize=(10,5))
+            for UUT in self.record_UUTs:
+                hi = hi_dict[UUT]
+                plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
+            plt.legend()
+            # plt.title(f'epoch:{epoch}')
+            plt.tight_layout()
+            self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
+
+    def compute_loss(self, start, end, hi_pre, hi_cur, p_pre, p_cur, y_pre, y_cur, UUT):
+        indice = self._UUT2idx(UUT)
+        cls_loss_wa_coef = self.cls_loss_wa_coef[indice]
+        mfe_loss_wa_coef = self.mfe_loss_wa_coef[indice]
+
+        cls_loss_start = cls_loss_wa_coef[start]@FocalLoss(p_pre[start], y_pre[start], alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='none')
+        cls_loss_cur= cls_loss_wa_coef@FocalLoss(p_cur, y_cur, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='none')
+        cls_loss = self.args.cls_loss_weight * (cls_loss_start + cls_loss_cur)
+
+        mfe_loss = self.args.mfe_loss_weight * (mfe_loss_wa_coef@self.model.mfe_loss(hi_pre, hi_cur, UUT, reduction = 'none'))
+
+        total_loss = cls_loss + mfe_loss
+        loss = {
+            'cls_loss': cls_loss,
+            'mfe_loss': mfe_loss,
+            'total_loss': total_loss
+        }
+        return loss
+
+
+
+class SCTrainer(BaseTWTrainer):
+    def get_model(self):
+        self.model = SC_DNN(self.args)
+        if self.args.load_model_fp:
+            self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
+        self.model.to(self.device)
+        # example_input = torch.randn((self.args.input_size,))
+        # self.logger.writer.add_graph(self.model,example_input)
+
+    def get_loss_wa_coef(self):
+        self.train_UUT_dict = {UUT:i for i,UUT in enumerate(self.ls_dict.index)}
+        self.mon_loss_wa_coef = torch.FloatTensor(1/(self.ls_dict.values-1))
+        self.con_loss_wa_coef = torch.FloatTensor(1/(self.ls_dict.values-2))
+
+    def train_per_epoch(self, epoch):
+        # Switch to train mode
+        self.model.train()
+
+        all_y = []
+        all_hi = []
+        for i, (start, end, UUT, t, (X_ppre, X_pre, X_cur), (y_ppre, y_pre, y_cur)) in enumerate(self.train_loader):
+            X_ppre = X_ppre.to(self.device)
+            X_pre = X_pre.to(self.device)
+            X_cur = X_cur.to(self.device)
+            # y_true = y_true.to(self.device)
+
+            hi_ppre = self.model(X_ppre)
+            hi_pre = self.model(X_pre)
+            hi_cur = self.model(X_cur)
+
+            loss = self.compute_loss(start, end, hi_ppre, hi_pre, hi_cur, UUT) # unsupervised Learning
+
+            total_loss = loss['total_loss']
+
+            self.optimizer.zero_grad()
+            total_loss.backward()
+            self.optimizer.step()
+
+            for k,v in loss.items():
+                self.logger.record_scalars('Loss/train', k, v)
+
+            if (i+1) % self.args.print_freq == 0:
+                print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
             
-            all_y_true.append(y_true)
-            all_hi.append(hi_cur.detach())
-        all_y_true = torch.concat(all_y_true)
+            all_y.extend([y_ppre[start],y_pre[start],y_cur])
+            all_hi.extend([hi_ppre[start].detach(),hi_pre[start].detach(),hi_cur.detach()])
+        all_y = torch.concat(all_y)
         all_hi = torch.concat(all_hi)
         self.cls_model = LogisticRegression(class_weight='balanced',)
-        self.cls_model.fit(all_hi,all_y_true)
+        self.cls_model.fit(all_hi,all_y)
 
     def val_per_epoch(self, epoch):
         self.model.eval()
@@ -403,7 +401,7 @@ class SCTrainer(BaseTWTrainer):
         }
         all_y_true = []
         all_hi = []
-        for UUT,t,X,y_true in self.record_HI_loader:
+        for UUT,t,X,y_true in self.val_loader:
             X = X.to(self.device)
             hi = self.model(X).detach()
             all_y_true.append(y_true)
@@ -431,15 +429,19 @@ class SCTrainer(BaseTWTrainer):
             plt.tight_layout()
             self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
 
-    def compute_loss(self, hi_ppre, hi_pre, hi_cur, hi_f, UUT):
+    def compute_loss(self, start, end, hi_ppre, hi_pre, hi_cur, UUT):
         indice = self._UUT2idx(UUT)
-        loss_wa_coef = self.loss_wa_coef[indice]
+        mon_loss_wa_coef = self.mon_loss_wa_coef[indice]
+        con_loss_wa_coef = self.con_loss_wa_coef[indice]
 
-        mvf_loss = self.args.mvf_loss_weight * (loss_wa_coef@MVFLoss(hi_f, self.args.MVFLoss_m, reduction="none"))
-        mon_loss = self.args.mon_loss_weight * (loss_wa_coef@MONLoss(hi_pre,hi_cur, c=self.args.MONLoss_c, reduction="none"))
-        con_loss = self.args.con_loss_weight * (loss_wa_coef@CONLoss(hi_ppre,hi_pre,hi_cur, c=self.args.CONLoss_c, reduction="none"))
+        mvf_loss = self.args.mvf_loss_weight * (MVFLoss(hi_cur[end], self.args.MVFLoss_m, reduction="sum"))
+
+        mon_loss_start = mon_loss_wa_coef[start]@MONLoss(hi_ppre[start],hi_pre[start], c=self.args.MONLoss_c, reduction="none")
+        mon_loss_cur = mon_loss_wa_coef@MONLoss(hi_pre,hi_cur, c=self.args.MONLoss_c, reduction="none")
+        mon_loss = self.args.mon_loss_weight * (mon_loss_start + mon_loss_cur)
+        con_loss = self.args.con_loss_weight * (con_loss_wa_coef@CONLoss(hi_ppre,hi_pre,hi_cur, c=self.args.CONLoss_c, reduction="none"))
+
         total_loss = mvf_loss + mon_loss + con_loss
-
         loss = {
             'mvf_loss': mvf_loss,
             'con_loss': con_loss,
