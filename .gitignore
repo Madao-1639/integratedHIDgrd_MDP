@@ -4,6 +4,7 @@
 *.py[cod]
 *.xlsx
 *.csv
+*.db
 
 .history/
 .vscode/

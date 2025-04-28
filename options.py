@@ -23,16 +23,15 @@ def parse_common_args(parser):
     parser.add_argument('--add_noise', action='store_true')
     # parser.add_argument('--NoiseAfterScale', action='store_true')
     parser.add_argument('--noise_type', type=str, default='gaussian', choices=['gaussian','white gaussian'])
-    parser.add_argument('--noise_param', type=int, default=0.1, help='std in gaussian, snr in white gaussian')
+    parser.add_argument('--noise_param', type=float, default=0.1, help='std in gaussian, snr in white gaussian')
 
     # Dataset setting
     parser.add_argument('--data_type', type=str, default='Base', choices=['Base','TW','RTF','RTFTW'], help='"TW" for Time Window dataset, "RTF" for Run-To-Failure dataset')
-    # parser.add_argument('--drop_failure', action='store_true', help='not output failure samples (not exclusive with -F)')
     parser.add_argument('-N', type=int, default=0, help='output N+1 consecutive samples')
-    # parser.add_argument('-F', action='store_true', help='include failure sample in each output')
     parser.add_argument('--window_width', type=int, default=15, help='Window width for TWDataset')
 
     # I/O
+    parser.add_argument('--no_log', action='store_false', dest='log', default=True, help='do not log')
     parser.add_argument('--log_path', type=str, default='log')
     parser.add_argument('--save_suffix', type=str, help='some comment for model')
     parser.add_argument('--load_model_fp', type=str, help='model path for pretrain or test')

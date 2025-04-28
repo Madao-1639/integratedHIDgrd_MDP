@@ -7,9 +7,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import kstest,shapiro,normaltest,anderson
 from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score
+import optuna
 
 from utils.data import select_loader
-from model import BaseTW, BaseRTF, SC_DNN
+from model import BaseRTF, BaseTW, SC_DNN
 from loss import FocalLoss,MVFLoss,MONLoss,CONLoss
 from utils.logger import Logger
 
@@ -17,15 +18,18 @@ from sklearn.linear_model import LogisticRegression
 
 class BaseRTFTrainer:
     '''Train BaseTW Model'''
-    def __init__(self,args,train_data,val_data=None,**logger_kwargs):
+    def __init__(self,args,train_data,val_data=None,opt_trial=None, **logger_kwargs):
         self.args = args
-        self.logger = Logger(args,**logger_kwargs)
+        if args.log:
+            self.logger = Logger(args,**logger_kwargs)
+        else:
+            self.logger = None
         if args.use_cuda and torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
             self.device = torch.device("cpu")
         print(f'Training on {self.device}')
-
+        self.opt_trial = opt_trial
         self.get_loader(train_data,val_data)
         self.get_model()
         self.get_optimizer()
@@ -87,11 +91,14 @@ class BaseRTFTrainer:
         for epoch in range(1,self.args.num_epoch+1):
             self.train_per_epoch(epoch)
             if self.val_loader is not None:
-                self.val_per_epoch(epoch)
-            if self.record_HI_loader is not None:
-                self.record_per_epoch(epoch)
-            self.logger.save_metrics(epoch)
-            self.logger.save_checkpoint(self.model, epoch)
+                obj = self.val_per_epoch(epoch)
+            if self.logger:
+                if self.record_HI_loader is not None:
+                    self.record_per_epoch(epoch)
+                self.logger.save_metrics(epoch)
+                self.logger.save_checkpoint(self.model, epoch)
+        if self.opt_trial:
+            return obj
 
     def train_per_epoch(self, epoch):
         # Switch to train mode
@@ -115,8 +122,9 @@ class BaseRTFTrainer:
             self.optimizer.step()
 
             # Logger record loss
-            for k,v in loss.items():
-                self.logger.record_scalars('Loss/train', k, v)
+            if self.logger:
+                for k,v in loss.items():
+                    self.logger.record_scalars('Loss/train', k, v)
 
             # Monitor training progress
             if (i+1) % self.args.print_freq == 0:
@@ -126,11 +134,6 @@ class BaseRTFTrainer:
         self.model.eval()
 
         # Classification metrics
-        metric_dict = {
-            'Recall': recall_score,
-            'Precision': precision_score,
-            'F1': f1_score,
-        }
         all_y_true = []
         all_y_pred = []
         for UUT,t,X,y_true in self.val_loader:
@@ -140,9 +143,20 @@ class BaseRTFTrainer:
             all_y_pred.append(y_pred)
         all_y_true = torch.concat(all_y_true)
         all_y_pred = torch.concat(all_y_pred)
-        for metric_name,metric_fun in metric_dict.items():
-            metric = metric_fun(all_y_true,all_y_pred)
-            self.logger.writer.add_scalar(f'{metric_name}/val',metric,epoch)
+        metric_result = {
+            'Recall': recall_score(all_y_true,all_y_pred),
+            'Precision': precision_score(all_y_true,all_y_pred),
+            'F1': f1_score(all_y_true,all_y_pred),
+        }
+        if self.logger:
+            for metric_name,metric in metric_result.items():
+                self.logger.writer.add_scalar(f'{metric_name}/val',metric,epoch)
+        if self.opt_trial:
+            obj = metric_result[self.opt_trial.user_attrs['obj_metric']]
+            self.opt_trial.report(obj, epoch)
+            if self.opt_trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+            return obj
 
     def record_per_epoch(self,epoch):
         self.logger.record_histogram('theta/train',self.model.theta_train)
@@ -211,8 +225,8 @@ class BaseRTFTrainer:
 
 class BaseTWTrainer(BaseRTFTrainer):
     '''Train BaseTW Model'''
-    def __init__(self,args,train_data,val_data=None,**logger_kwargs):
-        super().__init__(args,train_data,val_data,**logger_kwargs)
+    def __init__(self,args,train_data,val_data=None,opt_trial=None, **logger_kwargs):
+        super().__init__(args,train_data,val_data,opt_trial, **logger_kwargs)
         self.get_loss_wa_coef()
 
     def get_model(self):
@@ -236,7 +250,6 @@ class BaseTWTrainer(BaseRTFTrainer):
             return self.train_UUT_dict[UUT]
 
     def train_per_epoch(self, epoch):
-        # Switch to train mode
         self.model.train()
 
         for i, (start, end, UUT, t, (X_pre, X_cur), (y_pre, y_cur)) in enumerate(self.train_loader):
@@ -248,22 +261,18 @@ class BaseTWTrainer(BaseRTFTrainer):
             hi_pre, p_pre = self.model(X_pre)
             hi_cur, p_cur = self.model(X_cur)
 
-            # Compute loss
             loss = self.compute_loss(start, end, hi_pre, hi_cur, p_pre, p_cur, y_pre, y_cur, UUT)
 
-            # Get the item for backward
             total_loss = loss['total_loss']
 
-            # Compute gradient and do Adam step
             self.optimizer.zero_grad()
             total_loss.backward()
             self.optimizer.step()
 
-            # Logger record loss
-            for k,v in loss.items():
-                self.logger.record_scalars('Loss/train', k, v)
+            if self.logger:
+                for k,v in loss.items():
+                    self.logger.record_scalars('Loss/train', k, v)
 
-            # Monitor training progress
             if (i+1) % self.args.print_freq == 0:
                 print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
 
@@ -377,8 +386,9 @@ class SCTrainer(BaseTWTrainer):
             total_loss.backward()
             self.optimizer.step()
 
-            for k,v in loss.items():
-                self.logger.record_scalars('Loss/train', k, v)
+            if self.logger:
+                for k,v in loss.items():
+                    self.logger.record_scalars('Loss/train', k, v)
 
             if (i+1) % self.args.print_freq == 0:
                 print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
@@ -394,11 +404,6 @@ class SCTrainer(BaseTWTrainer):
         self.model.eval()
 
         # Classification metrics
-        metric_dict = {
-            'Recall': recall_score,
-            'Precision': precision_score,
-            'F1': f1_score,
-        }
         all_y_true = []
         all_hi = []
         for UUT,t,X,y_true in self.val_loader:
@@ -409,9 +414,20 @@ class SCTrainer(BaseTWTrainer):
         all_y_true = torch.concat(all_y_true)
         all_hi = torch.concat(all_hi)
         all_y_pred = self.cls_model.predict(all_hi)
-        for metric_name,metric_fun in metric_dict.items():
-            metric = metric_fun(all_y_true,all_y_pred)
-            self.logger.writer.add_scalar(f'{metric_name}/val',metric,epoch)
+        metric_result = {
+            'Recall': recall_score(all_y_true,all_y_pred),
+            'Precision': precision_score(all_y_true,all_y_pred),
+            'F1': f1_score(all_y_true,all_y_pred),
+        }
+        if self.logger:
+            for metric_name,metric in metric_result.items():
+                self.logger.writer.add_scalar(f'{metric_name}/val',metric,epoch)
+        if self.opt_trial:
+            obj = metric_result[self.opt_trial.user_attrs['obj_metric']]
+            self.opt_trial.report(obj, epoch)
+            if self.opt_trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+            return obj
 
     def record_per_epoch(self,epoch):
         self.model.eval()

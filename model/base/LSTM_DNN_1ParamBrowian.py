@@ -14,7 +14,8 @@ class BaseTW(nn.Module):
         dnn_seq = []
         input_size = args.Base_lstm_hidden_size
         for hidden_size in args.Base_dnn_hidden_sizes:
-            dnn_seq.extend([nn.Linear(input_size, hidden_size),nn.ReLU()])
+            dnn_seq.append(nn.Linear(input_size, hidden_size))
+            dnn_seq.append(nn.ReLU())
             input_size = hidden_size
         dnn_seq.append(nn.Linear(input_size,1))
         self.dnn = nn.Sequential(*dnn_seq)
@@ -66,10 +67,6 @@ class BaseTW(nn.Module):
         )
 
 class BaseRTF(BaseTW):
-    # def __init__(self, args, train_UUTs, mu0=1, sigma0=1, sigma_square=1):
-    #     super().__init__(args, train_UUTs, mu0, sigma0)
-    #     self.sigma_square = nn.Parameter(torch.FloatTensor([sigma_square]))
-
     def forward(self,x,hidden=None):
         lstm_output, (h,c) = self.lstm(x,hidden)
         hi = self.dnn(lstm_output.squeeze(0)).squeeze(-1)
