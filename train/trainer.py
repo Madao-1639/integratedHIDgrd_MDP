@@ -223,6 +223,8 @@ class BaseRTFTrainer:
         }
         return loss
 
+
+
 class BaseTWTrainer(BaseRTFTrainer):
     '''Train BaseTW Model'''
     def __init__(self,args,train_data,val_data=None,opt_trial=None, **logger_kwargs):

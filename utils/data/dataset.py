@@ -187,8 +187,6 @@ class RTFDataset(IterableDataset):
 
     def __iter__(self):
         for UUT, grouped_data in self.grouped:
-            end_time = self.ls_dict[UUT]
-            grouped_data = grouped_data.iloc[:end_time]
             t = grouped_data['time'].values
             y = grouped_data['label'].values
             data = grouped_data[self.var_columns].values
@@ -203,11 +201,11 @@ class RTFTWDataset(RTFDataset):
 
     def __iter__(self):
         for UUT, grouped_data in self.grouped:
-            end_time = self.ls_dict[UUT]
-            grouped_aux = grouped_data.iloc[self.window_width-1:end_time]
+            grouped_aux = grouped_data.iloc[self.window_width-1:]
             t = grouped_aux['time'].values
             y = grouped_aux['label'].values
             data = []
+            end_time = self.ls_dict[UUT]
             for window_time in range(self.window_width,end_time+1):
                 window_data = grouped_data.iloc[window_time-self.window_width:window_time,2:-1].values
                 data.append(window_data)
