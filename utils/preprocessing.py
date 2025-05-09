@@ -3,6 +3,17 @@ import numpy as np
 import math
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
+class LogTransformer:
+    def __init__(self,delta=1):
+        self.delta = delta
+    def fit(self,data):
+        self.phi = data.min() - self.delta
+    def transform(self,data):
+        return np.log(data-self.phi)
+    def fit_transform(self,data):
+        self.fit(data)
+        return self.transform(data)
+
 def read_train_data(data_fp, drop_vars):
     '''Read data as a Dataframe, then drop condition columns and duplicate variables.'''
     var_cols = list(range(5,26))
@@ -24,11 +35,6 @@ def get_scaler_by_type(scaler_type):
     }
     scaler = type2scaler[scaler_type]
     return scaler
-
-def scale_data(data, scaler, train = False):
-    if train:
-        scaler.fit(data)
-    return scaler.transform(data)
 
 def add_noise(data, noise_type = 'gaussian', noise_param = 0.1):
     '''Add noise on raw data.

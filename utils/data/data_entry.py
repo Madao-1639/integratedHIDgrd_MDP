@@ -44,20 +44,20 @@ def select_loader(data,train,args,data_type=None):
         if train and args.N > 0:
             dataset = BaseDataset_ND(data,train,args)
             dataloader = DataLoader(dataset, args.batch_size,
-            shuffle=train, num_workers=args.num_workers, collate_fn=custom_collate_fn_ND, pin_memory=True, drop_last=False)
+            shuffle=train, num_workers=train*args.num_workers, collate_fn=custom_collate_fn_ND, pin_memory=True, drop_last=False)
         else:
             dataset = BaseDataset(data,train,args)
             dataloader = DataLoader(dataset, args.batch_size,
-            shuffle=train, num_workers=args.num_workers, collate_fn=custom_collate_fn, pin_memory=True, drop_last=False)
+            shuffle=train, num_workers=train*args.num_workers, collate_fn=custom_collate_fn, pin_memory=True, drop_last=False)
     elif data_type == 'TW':
         if train and args.N > 0:
             dataset = TWDataset_ND(data,train,args)
             dataloader = DataLoader(dataset, args.batch_size,
-            shuffle=train, num_workers=args.num_workers, collate_fn=custom_collate_fn_ND, pin_memory=True, drop_last=False)
+            shuffle=train, num_workers=train*args.num_workers, collate_fn=custom_collate_fn_ND, pin_memory=True, drop_last=False)
         else:
             dataset = TWDataset(data,train,args)
             dataloader = DataLoader(dataset, args.batch_size,
-            shuffle=train, num_workers=args.num_workers, collate_fn=custom_collate_fn, pin_memory=True, drop_last=False)
+            shuffle=train, num_workers=train*args.num_workers, collate_fn=custom_collate_fn, pin_memory=True, drop_last=False)
     elif data_type == 'RTF':
         dataset = RTFDataset(data,train,args)
         dataloader = DataLoader(dataset,collate_fn=custom_RTF_collate_fn,pin_memory=True,)

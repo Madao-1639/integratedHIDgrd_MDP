@@ -20,16 +20,11 @@ class BaseDataset(Dataset):
         self.get_sample_indice()
 
     def get_label(self):
-        failure_time = self.data.groupby('UUT')['time'].transform('max')
+        end_time = self.data.groupby('UUT')['time'].transform('max')
         if self.task == 'cls':
-            def _assign_label(x):
-                if x == 0:
-                    return 1
-                elif x > 0:
-                    return 0
-            self.data = self.data.assign(label=(failure_time-self.data['time']).map(_assign_label))
+            self.data = self.data.assign(label=(self.data['time']>=end_time).astype(int))
         else:
-            self.data = self.data.assign(label = failure_time-self.data['time'])
+            self.data = self.data.assign(label = end_time-self.data['time']+1)
 
     def get_sample_indice(self):
         self.sample_indice = self.data.index
@@ -174,16 +169,11 @@ class RTFDataset(IterableDataset):
         self.ls_dict = grouped['time'].max()
 
     def get_label(self):
-        failure_time = self.data.groupby('UUT')['time'].transform('max')
+        end_time = self.data.groupby('UUT')['time'].transform('max')
         if self.task == 'cls':
-            def _assign_label(x):
-                if x == 0:
-                    return 1
-                elif x > 0:
-                    return 0
-            self.data = self.data.assign(label=(failure_time-self.data['time']).map(_assign_label))
+            self.data = self.data.assign(label=(self.data['time']>=end_time).astype(int))
         else:
-            self.data = self.data.assign(label = failure_time-self.data['time'])
+            self.data = self.data.assign(label = end_time-self.data['time']+1)
 
     def __iter__(self):
         for UUT, grouped_data in self.grouped:

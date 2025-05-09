@@ -1,5 +1,4 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
 
 def _loss_reduction(loss,reduction: str):
@@ -33,8 +32,12 @@ def MVFLoss(hi_f,m=1,reduction="none",):
     loss = torch.square(hi_f-m)
     return _loss_reduction(loss,reduction)
 
-def MONLoss(hi_pre,hi_cur,c=0,penalty_type='exp',reduction="none",):
-    diff = hi_pre - hi_cur + c
+def MONLoss(hi_pre,hi_cur=None,c=0,penalty_type='exp',reduction="none",):
+    if hi_cur is not None:
+        diff = hi_pre - hi_cur + c 
+    else:
+        # Run-to-failure
+        diff = -hi_pre.diff() + c
     if penalty_type == 'linear':
         inner_term = diff
     elif penalty_type == 'exp':
@@ -48,7 +51,10 @@ def MONLoss(hi_pre,hi_cur,c=0,penalty_type='exp',reduction="none",):
     loss = F.relu(inner_term)
     return _loss_reduction(loss,reduction)
 
-def CONLoss(hi_ppre,hi_pre,hi_cur,**mon_kwargs):
-    d_pre = hi_ppre - hi_pre
-    d_cur = hi_pre - hi_cur
-    return MONLoss(d_pre,d_cur,**mon_kwargs)
+def CONLoss(hi_ppre,hi_pre=None,hi_cur=None,**mon_kwargs):
+    if hi_pre is not None:
+        d_pre = hi_ppre - hi_pre
+        d_cur = hi_pre - hi_cur
+        return MONLoss(d_pre,d_cur,**mon_kwargs)
+    else:
+        return MONLoss(hi_ppre.diff(),**mon_kwargs)
