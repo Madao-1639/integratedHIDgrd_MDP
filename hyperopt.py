@@ -4,8 +4,8 @@ from options import prepare_train_args
 from utils.utils import set_seed
 
 
-def objective(trial):
-    obj_metric = 'F1'
+
+def gen_hp(trial,args):
     # Generate hyperparams
         # NAS (Neural Architecture Search)
     n_layers = trial.suggest_int('num_hidden_layers', 1, 2)
@@ -23,9 +23,13 @@ def objective(trial):
     # Set new hyperparams to args
     for key, value in params.items():
         setattr(args, key, value)
+
+def objective(trial):
+    obj_metric = 'F1'
+    gen_hp(trial,args)
     # Get trainer
     trainer = select_trainer(args,\
-        opt_trial = trial) #, comment= comment
+        opt_trial = trial)
     # Train & Val & Report
     # best_obj = 0
     for epoch in range(1,args.num_epoch+1):
@@ -39,15 +43,37 @@ def objective(trial):
             # return best_obj   # Early stopping
     return obj
 
-if __name__ == '__main__':
-    args = prepare_train_args()
-    set_seed(args.seed)
-    study = optuna.create_study(
-        study_name=args.model_name,
-        storage='sqlite:///hyperopt.db',
-        direction="maximize",
-        pruner=optuna.pruners.PatientPruner(optuna.pruners.ThresholdPruner(lower=0.1), patience=2), # Early stopping & prune
-        # pruner=optuna.pruners.MedianPruner(),
-        load_if_exists=True,
-    )
+def objective_cv(trial):
+    obj_metric = 'F1'
+    gen_hp(trial,args)
+    trainer_seq = select_trainer(args,\
+        opt_trial = trial)
+    # best_obj = 0
+    for epoch in range(1,args.num_epoch+1):
+        obj_list = []
+        for trainer in trainer_seq:
+            trainer.train_per_epoch(epoch)
+            metrics = trainer.val_per_epoch(epoch)
+            obj_list.append(metrics[obj_metric])
+        obj = sum(obj_list)/len(obj_list)
+        trial.report(obj, epoch)
+        # best_obj = max(best_obj,obj)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+            # return best_obj   # Early stopping
+    return obj
+
+args = prepare_train_args()
+set_seed(args.seed)
+study = optuna.create_study(
+    study_name=args.model_name,
+    storage='sqlite:///hyperopt.db',
+    direction="maximize",
+    pruner=optuna.pruners.PatientPruner(optuna.pruners.ThresholdPruner(lower=0.1), patience=2), # Early stopping & prune
+    # pruner=optuna.pruners.MedianPruner(),
+    load_if_exists=True,
+)
+if args.k_fold > 0:
+    study.optimize(objective_cv, n_trials=2)
+else:
     study.optimize(objective, n_trials=2)

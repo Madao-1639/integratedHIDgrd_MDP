@@ -30,12 +30,10 @@ def read_data(data_fp, drop_vars):
     return data
 
 def get_scaler_by_type(scaler_type):
-    type2scaler = {
-        'Standard': StandardScaler(),
-        'MinMax': MinMaxScaler(),
-    }
-    scaler = type2scaler[scaler_type]
-    return scaler
+    if scaler_type == 'Standard':
+        return StandardScaler()
+    elif scaler_type == 'MinMax':
+        return MinMaxScaler()
 
 def add_noise(data, noise_type = 'gaussian', noise_param = 0.1):
     '''Add noise on raw data.
