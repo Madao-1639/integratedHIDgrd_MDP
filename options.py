@@ -36,7 +36,7 @@ def parse_common_args(parser):
     parser.add_argument('--window_width', type=int, default=15, help='Window width for TWDataset')
 
     # I/O
-    parser.add_argument('--no_log', action='store_false', dest='log', default=True, help='Do not log')
+    parser.add_argument('--no_logger', action='store_false', dest='log', default=True, help='Do not keep log')
     parser.add_argument('--log_path', type=str, default='log')
     parser.add_argument('--save_suffix', type=str, help='Comment for model')
     parser.add_argument('--load_model_fp', type=str, help='Model path for pretrain or test')

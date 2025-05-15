@@ -71,6 +71,7 @@ study = optuna.create_study(
     study_name=args.model_name,
     storage='sqlite:///hyperopt.db',
     direction="maximize",
+    sampler=optuna.samplers.TPESampler(seed=args.seed), #  Specify a seed to make the parameters reproducible
     pruner=optuna.pruners.PatientPruner(optuna.pruners.ThresholdPruner(lower=0.1), patience=2), # Early stopping & prune
     # pruner=optuna.pruners.MedianPruner(),
     load_if_exists=True,
