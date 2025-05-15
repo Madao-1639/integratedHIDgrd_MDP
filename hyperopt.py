@@ -5,26 +5,39 @@ from utils.utils import set_seed
 
 
 def objective(trial):
-    trial.set_user_attr('obj_metric', 'F1')
-    # gen_opt_hyperparams
+    obj_metric = 'F1'
+    # Generate hyperparams
+        # NAS (Neural Architecture Search)
     n_layers = trial.suggest_int('num_hidden_layers', 1, 2)
     # n_layers = 2
-    hidden_sizes = [trial.suggest_int(f'hidden_size_{layer}', 16, 64, log=True) for layer in range(1,n_layers+1)]
+    hidden_sizes = [trial.suggest_int(f'hidden_size_{layer}', 3, 12) for layer in range(1,n_layers+1)]
+        # Other hyperparams
     params = {
-        'Base_dnn_hidden_sizes': hidden_sizes,
-        'Base_lstm_hidden_size':trial.suggest_int('lstm_hidden_size', 16, 64, log = True),
-        'mfe_loss_weight': trial.suggest_float('mfe_loss_weight', 0.05, 0.10),
+        'SC_dnn_hidden_sizes': hidden_sizes,
+        # 'Base_lstm_hidden_size':trial.suggest_int('lstm_hidden_size', 16, 64, log = True),
+        # 'mfe_loss_weight': trial.suggest_float('mfe_loss_weight', 0.05, 0.10),
         # 'mvf_loss_weight': trial.suggest_float('mvf_loss_weight', 0.01, 0.1),
-        # 'mon_loss_weight': trial.suggest_float('mon_loss_weight', 1, 10),
-        # 'con_loss_weight': trial.suggest_float('con_loss_weight', 0.01, 0.05),
-    } # Hyperparams to be tuned
-    # comment = f'trial{trial.number:04d}' # Add comment in log
+        'mon_loss_weight': trial.suggest_float('mon_loss_weight', 5, 10),
+        'con_loss_weight': trial.suggest_float('con_loss_weight', 1, 5),
+    }
+    # Set new hyperparams to args
     for key, value in params.items():
-        setattr(args, key, value) # Update args
-        # comment += f'_{key}{value:.2f}'
+        setattr(args, key, value)
+    # Get trainer
     trainer = select_trainer(args,\
         opt_trial = trial) #, comment= comment
-    return trainer.train()
+    # Train & Val & Report
+    # best_obj = 0
+    for epoch in range(1,args.num_epoch+1):
+        trainer.train_per_epoch(epoch)
+        metrics = trainer.val_per_epoch(epoch)
+        obj = metrics[obj_metric]
+        trial.report(obj, epoch)
+        # best_obj = max(best_obj,obj)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+            # return best_obj   # Early stopping
+    return obj
 
 if __name__ == '__main__':
     args = prepare_train_args()
@@ -33,8 +46,8 @@ if __name__ == '__main__':
         study_name=args.model_name,
         storage='sqlite:///hyperopt.db',
         direction="maximize",
-        pruner=optuna.pruners.PatientPruner(optuna.pruners.ThresholdPruner(lower=0.1), patience=5), # Early stopping & prune
+        pruner=optuna.pruners.PatientPruner(optuna.pruners.ThresholdPruner(lower=0.1), patience=2), # Early stopping & prune
         # pruner=optuna.pruners.MedianPruner(),
         load_if_exists=True,
     )
-    study.optimize(objective, n_trials=200)
+    study.optimize(objective, n_trials=2)

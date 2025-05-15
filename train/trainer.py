@@ -19,7 +19,7 @@ from utils.logger import Logger
 from abc import ABC, abstractmethod
 class BaseTrainer(ABC):
     """Base class for trainers."""
-    def __init__(self,args,train_data: "pd.DataFrame",val_data: "pd.DataFrame" =None, opt_trial: "optuna.trial.Trial"=None, **logger_kwargs) -> None:
+    def __init__(self,args,train_data: "pd.DataFrame",val_data: "pd.DataFrame" =None, **logger_kwargs) -> None:
         self.args = args
         if args.log:
             self.logger = Logger(args,**logger_kwargs)
@@ -30,7 +30,6 @@ class BaseTrainer(ABC):
         else:
             self.device = torch.device("cpu")
         print(f'Training on {self.device}')
-        self.opt_trial = opt_trial
         self.get_loader(train_data,val_data)
         self.get_model()
         self.get_optimizer()
@@ -97,21 +96,12 @@ class BaseTrainer(ABC):
             return self.train_UUT_dict[UUT]
 
     def train(self):
-        best_obj = 0
         for epoch in range(1,self.args.num_epoch+1):
             # Train Stage
             self.train_per_epoch(epoch)
-            # Val Stage
+            # Val Stage (log cls metrics)
             if self.val_loader is not None:
-                metric_result = self.val_per_epoch(epoch)
-                # Report an objective function value for a given step.
-                if self.opt_trial:
-                    obj = metric_result[self.opt_trial.user_attrs['obj_metric']]
-                    self.opt_trial.report(obj, epoch)
-                    best_obj = max(best_obj,obj)
-                    if self.opt_trial.should_prune():
-                        # raise optuna.TrialPruned()
-                        return best_obj
+                self.val_per_epoch(epoch)
             if self.logger:
                 # Record HI
                 if self.record_HI_loader is not None:
@@ -119,8 +109,6 @@ class BaseTrainer(ABC):
                 # Log results
                 self.logger.save_metrics(epoch)
                 self.logger.save_checkpoint(self.model, epoch)
-        if self.opt_trial:
-            return obj
 
     @abstractmethod
     def train_per_epoch(self,epoch: "int"):
