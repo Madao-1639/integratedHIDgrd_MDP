@@ -1,4 +1,3 @@
-# import os
 import optuna
 from train import select_trainer
 from options import prepare_train_args
@@ -28,14 +27,14 @@ def objective(trial):
     return trainer.train()
 
 if __name__ == '__main__':
-    # os.chdir(os.path.dirname(os.path.abspath(__file__)))
     args = prepare_train_args()
     set_seed(args.seed)
     study = optuna.create_study(
         study_name=args.model_name,
         storage='sqlite:///hyperopt.db',
         direction="maximize",
-        pruner=optuna.pruners.MedianPruner(),
+        pruner=optuna.pruners.PatientPruner(optuna.pruners.ThresholdPruner(lower=0.1), patience=5), # Early stopping & prune
+        # pruner=optuna.pruners.MedianPruner(),
         load_if_exists=True,
     )
     study.optimize(objective, n_trials=200)

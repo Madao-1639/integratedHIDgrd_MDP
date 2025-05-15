@@ -10,6 +10,8 @@ def select_trainer(args,**trainer_kwargs):
             Trainer = BaseRTFTrainer
     elif args.model_type == 'SC':
         Trainer = SCTrainer
+    else:
+        Trainer = IntegratedTrainer
 
     if args.k_fold > 0:
         return [Trainer(args,train_data,val_data,**trainer_kwargs) for train_data,val_data in read_preprocess_data(args)]
@@ -30,6 +32,8 @@ def select_trainer_NoiseAfterScale(args,**trainer_kwargs):
             Trainer = BaseRTFTrainer
     elif args.model_type == 'SC':
         Trainer = SCTrainer
+    else:
+        Trainer = IntegratedTrainer
 
     if args.k_fold > 0:
         return [Trainer(args,train_data,val_data,**trainer_kwargs) for train_data,val_data in read_preprocess_data_NoiseAfterScale(args)]

@@ -5,40 +5,44 @@ import time
 
 def parse_common_args(parser):
     # Model setting
-    parser.add_argument('--model_type', type=str, default='Base', help='used in model_entry.py')
+    parser.add_argument('--model_type', type=str, default='Base', choices=['Base','SC','Integrated'])
     parser.add_argument('--task', type=str, default='reg', choices=['cls','reg'], help='"cls" for classification, "reg" for regression')
         # Base
     parser.add_argument('--Base_lstm_hidden_size', type=int, default=16)
     parser.add_argument('--Base_num_lstm_layers', type=int, default=1)
     parser.add_argument('--Base_lstm_dropout', type=float, default=0.0)
-    parser.add_argument('--Base_dnn_hidden_sizes', nargs='*', type=int, default=[16])
+    parser.add_argument('--Base_dnn_hidden_sizes', nargs='+', type=int, default=[16])
     parser.add_argument('--Base_activate', type=str, default='SigmoidExpBias', choices=['Sigmoid','SigmoidExpBias','SigmoidLinear','SigmoidLinearReLU','SigmoidLeakyReLU','SigmoidELU'])
     parser.add_argument('--Base_cls_thres', type=float, default=0.5)
         # SC
-    parser.add_argument('--SC_dnn_hidden_sizes', nargs='*', type=int, default=[16,16])
-    
+    parser.add_argument('--SC_dnn_hidden_sizes', nargs='+', type=int, default=[5,3])
+        # Integrated
+    parser.add_argument('--Integrated_dnn_hidden_sizes', nargs='+', type=int, default=[3])
+    parser.add_argument('--Integrated_lstm_hidden_size', type=int, default=3)
+    parser.add_argument('--Integrated_num_lstm_layers', type=int, default=1)
+    parser.add_argument('--Integrated_lstm_dropout', type=float, default=0.0)
+
     # Data Preprocessing
-    parser.add_argument('--drop_vars', nargs='*', type=int, default=[1,5,6,10,16,18,19], help='drop duplicate variables by index')
+    parser.add_argument('--drop_vars', nargs='*', type=int, default=[1,5,6,10,16,18,19], help='Drop duplicate variables')
     parser.add_argument('--scaler_type', type=str, default='Standard', choices=['Standard','MinMax'],)
+    parser.add_argument('--log_transform', action='store_true', help='Perform logarithm transformation when preprocessing data')
     parser.add_argument('--add_noise', action='store_true')
-    # parser.add_argument('--NoiseAfterScale', action='store_true')
     parser.add_argument('--noise_type', type=str, default='gaussian', choices=['gaussian','white gaussian'])
     parser.add_argument('--noise_param', type=float, default=0.1, help='std in gaussian, snr in white gaussian')
 
     # Dataset setting
     parser.add_argument('--data_type', type=str, default='Base', choices=['Base','TW','RTF','RTFTW'], help='"TW" for Time Window dataset, "RTF" for Run-To-Failure dataset')
-    parser.add_argument('-N', type=int, default=0, help='output N+1 consecutive samples')
+    parser.add_argument('-N', type=int, default=0, help='Output N+1 consecutive samples')
     parser.add_argument('--window_width', type=int, default=15, help='Window width for TWDataset')
 
     # I/O
-    parser.add_argument('--no_log', action='store_false', dest='log', default=True, help='do not log')
+    parser.add_argument('--no_log', action='store_false', dest='log', default=True, help='Do not log')
     parser.add_argument('--log_path', type=str, default='log')
-    parser.add_argument('--save_suffix', type=str, help='some comment for model')
-    parser.add_argument('--load_model_fp', type=str, help='model path for pretrain or test')
+    parser.add_argument('--save_suffix', type=str, help='Comment for model')
+    parser.add_argument('--load_model_fp', type=str, help='Model path for pretrain or test')
     parser.add_argument('--result_dir', type=str)
     parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--seed', type=int, default=42)
-    # parser.add_argument('--verbose', action='store_true')
     return parser
 
 
@@ -78,8 +82,6 @@ def parse_train_args(parser):
 
 def parse_test_args(parser):
     parser.add_argument('--test_fp', type=str, default='data/test_FD001.txt',)
-    parser.add_argument('--record_HI', action='store_true')
-    parser.add_argument('--record_UUTs', type=int, nargs='*')
     return parser
 
 

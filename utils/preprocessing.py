@@ -37,11 +37,6 @@ def get_scaler_by_type(scaler_type):
     scaler = type2scaler[scaler_type]
     return scaler
 
-def scale_data(data, scaler, train = False):
-    if train:
-        scaler.fit(data)
-    return scaler.transform(data)
-
 def add_noise(data, noise_type = 'gaussian', noise_param = 0.1):
     '''Add noise on raw data.
     Input:
