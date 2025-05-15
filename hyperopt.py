@@ -8,10 +8,16 @@ from utils.utils import set_seed
 def objective(trial):
     trial.set_user_attr('obj_metric', 'F1')
     # gen_opt_hyperparams
+    n_layers = trial.suggest_int('num_hidden_layers', 1, 2)
+    # n_layers = 2
+    hidden_sizes = [trial.suggest_int(f'hidden_size_{layer}', 16, 64, log=True) for layer in range(1,n_layers+1)]
     params = {
-        # 'lr': trial.suggest_float('lr', 1e-5, 1e-1, log=True),
-        'mon_loss_weight': trial.suggest_float('mon_loss_weight', 1, 10),
-        'con_loss_weight': trial.suggest_float('con_loss_weight', 1, 10),
+        'Base_dnn_hidden_sizes': hidden_sizes,
+        'Base_lstm_hidden_size':trial.suggest_int('lstm_hidden_size', 16, 64, log = True),
+        'mfe_loss_weight': trial.suggest_float('mfe_loss_weight', 0.05, 0.10),
+        # 'mvf_loss_weight': trial.suggest_float('mvf_loss_weight', 0.01, 0.1),
+        # 'mon_loss_weight': trial.suggest_float('mon_loss_weight', 1, 10),
+        # 'con_loss_weight': trial.suggest_float('con_loss_weight', 0.01, 0.05),
     } # Hyperparams to be tuned
     # comment = f'trial{trial.number:04d}' # Add comment in log
     for key, value in params.items():
@@ -32,4 +38,4 @@ if __name__ == '__main__':
         pruner=optuna.pruners.MedianPruner(),
         load_if_exists=True,
     )
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=200)

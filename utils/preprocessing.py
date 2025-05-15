@@ -3,8 +3,20 @@ import numpy as np
 import math
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-def read_train_data(data_fp, drop_vars):
-    '''Read data as a Dataframe, then drop condition columns and duplicate variables.'''
+class LogTransformer:
+    def __init__(self,delta=1):
+        self.delta = delta
+    def fit(self,data):
+        self.phi = data.min() - self.delta
+    def transform(self,data):
+        return np.log(data-self.phi)
+    def fit_transform(self,data):
+        self.fit(data)
+        return self.transform(data)
+
+def read_data(data_fp, drop_vars):
+    '''1. Read data as a Dataframe
+    2. Drop condition columns and duplicate variables.'''
     var_cols = list(range(5,26))
     usecols = [0,1] + var_cols # Drop condition columns
     dtype_dict = {_:'float32' for _ in var_cols} # Specify dtypes
@@ -72,8 +84,91 @@ def gen_loo_data(data,val_ratio=0.2):
     grouped = data.groupby('UUT')
     val_UUTs = np.random.choice(list(grouped.groups),
             size=int(val_ratio*len(grouped)),
-        ) # stratified random sampling: p=grouped.size()/len(data)
+        ) # Stratified random sampling: p=grouped.size()/len(data)
     filter_bool = data['UUT'].isin(val_UUTs)
     train_data = data[~filter_bool]
     val_data = data[filter_bool]
     return train_data, val_data
+
+def read_preprocess_data(args):
+    data = read_data(args.train_fp,args.drop_vars)
+    # Preprocess data
+    if args.add_noise:
+        data = add_noise(data,args.noise_type,args.noise_param)
+    if args.k_fold > 0:
+        data_seq = []
+        for train_data, val_data in gen_cv_data(data,args.k_fold):
+            if args.scaler_type:
+                scaler = get_scaler_by_type(args.scaler_type)
+                train_data.iloc[:,2:] = scaler.fit_transform(train_data.iloc[:,2:])
+                val_data.iloc[:,2:] = scaler.transform(val_data.iloc[:,2:])
+            if args.log_transform:
+                log_transformer = LogTransformer()
+                train_data.iloc[:,2:] = log_transformer.fit_transform(train_data.iloc[:,2:])
+                val_data.iloc[:,2:] = log_transformer.transform(val_data.iloc[:,2:])
+            data_seq.append((train_data,val_data))
+        return data_seq
+    elif 0 < args.val_ratio < 1:
+        train_data, val_data = gen_loo_data(data,args.val_ratio)
+        if args.scaler_type:
+            scaler = get_scaler_by_type(args.scaler_type)
+            train_data.iloc[:,2:] = scaler.fit_transform(train_data.iloc[:,2:])
+            val_data.iloc[:,2:] = scaler.transform(val_data.iloc[:,2:])
+        if args.log_transform:
+            log_transformer = LogTransformer()
+            train_data.iloc[:,2:] = log_transformer.fit_transform(train_data.iloc[:,2:])
+            val_data.iloc[:,2:] = log_transformer.transform(val_data.iloc[:,2:])
+        return train_data,val_data
+    else:
+        if args.scaler_type:
+            scaler = get_scaler_by_type(args.scaler_type)
+            data.iloc[:,2:] = scaler.fit_transform(data.iloc[:,2:])
+        if args.log_transform:
+            log_transformer = LogTransformer()
+            data.iloc[:,2:] = log_transformer.fit_transform(data.iloc[:,2:])
+        return data
+
+def read_preprocess_data_NoiseAfterScale(args):
+    data = read_data(args.train_fp,args.drop_vars)
+    # Preprocess data
+    if args.k_fold > 0:
+        data_seq = []
+        for train_data, val_data in gen_cv_data(data,args.k_fold):
+            if args.scaler_type:
+                scaler = get_scaler_by_type(args.scaler_type)
+                train_data.iloc[:,2:] = scaler.fit_transform(train_data.iloc[:,2:])
+                val_data.iloc[:,2:] = scaler.transform(val_data.iloc[:,2:])
+            if args.add_noise:
+                train_data = add_noise(train_data,args.noise_type,args.noise_param)
+                val_data =  add_noise(val_data,args.noise_type,args.noise_param)
+            if args.log_transform:
+                log_transformer = LogTransformer()
+                train_data.iloc[:,2:] = log_transformer.fit_transform(train_data.iloc[:,2:])
+                val_data.iloc[:,2:] = log_transformer.transform(val_data.iloc[:,2:])
+            data_seq.append((train_data,val_data))
+        return data_seq
+    elif 0 < args.val_ratio < 1:
+        train_data, val_data = gen_loo_data(data,args.val_ratio)
+        if args.scaler_type:
+            scaler = get_scaler_by_type(args.scaler_type)
+            train_data.iloc[:,2:] = scaler.fit_transform(train_data.iloc[:,2:])
+            val_data.iloc[:,2:] = scaler.transform(val_data.iloc[:,2:])
+        if args.add_noise:
+            train_data = add_noise(train_data,args.noise_type,args.noise_param)
+            val_data =  add_noise(val_data,args.noise_type,args.noise_param)
+        if args.log_transform:
+            log_transformer = LogTransformer()
+            train_data.iloc[:,2:] = log_transformer.fit_transform(train_data.iloc[:,2:])
+            val_data.iloc[:,2:] = log_transformer.transform(val_data.iloc[:,2:])
+        return train_data,val_data
+    else:
+        if args.scaler_type:
+            scaler = get_scaler_by_type(args.scaler_type)
+            data.iloc[:,2:] = scaler.fit_transform(data.iloc[:,2:])
+        if args.add_noise:
+            train_data = add_noise(train_data,args.noise_type,args.noise_param)
+            val_data =  add_noise(val_data,args.noise_type,args.noise_param)
+        if args.log_transform:
+            log_transformer = LogTransformer()
+            data.iloc[:,2:] = log_transformer.fit_transform(data.iloc[:,2:])
+        return data
