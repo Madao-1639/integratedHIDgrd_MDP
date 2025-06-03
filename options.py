@@ -36,10 +36,12 @@ def parse_common_args(parser):
     parser.add_argument('--window_width', type=int, default=15, help='Window width for TWDataset')
 
     # I/O
-    parser.add_argument('--no_logger', action='store_false', dest='log', default=True, help='Do not keep log')
+    parser.add_argument('--load_model_fp', type=str, help='Model path for pretrain or test')
+    parser.add_argument('--no_logger', action='store_false', dest='logger', default=True, help='Do not keep log')
     parser.add_argument('--log_path', type=str, default='log')
     parser.add_argument('--save_suffix', type=str, help='Comment for model')
-    parser.add_argument('--load_model_fp', type=str, help='Model path for pretrain or test')
+    parser.add_argument('--record_HI', type=str, choices = [None,'train','val','all'])
+    parser.add_argument('--record_UUTs', type=int, nargs='*')
     parser.add_argument('--result_dir', type=str)
     parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--seed', type=int, default=42)
@@ -50,10 +52,7 @@ def parse_train_args(parser):
     parser.add_argument('--train_fp', type=str, default='data/train_FD001.txt')
     parser.add_argument('--k_fold', type=int, default=5)
     parser.add_argument('--val_ratio', type=float, default=0.2)
-    parser.add_argument('--record_HI', type=str, choices = [None,'train','val','all'])
-    parser.add_argument('--record_UUTs', type=int, nargs='*')
     parser.add_argument('--record_freq', type=int, default=5)
-
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--num_epoch', type=int, default=200)

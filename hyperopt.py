@@ -25,6 +25,7 @@ def gen_hp(trial,args):
         setattr(args, key, value)
 
 def objective(trial):
+    global args
     obj_metric = 'F1'
     gen_hp(trial,args)
     # Get trainer
@@ -44,6 +45,7 @@ def objective(trial):
     return obj
 
 def objective_cv(trial):
+    global args
     obj_metric = 'F1'
     gen_hp(trial,args)
     trainer_seq = select_trainer(args,\

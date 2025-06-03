@@ -21,7 +21,7 @@ class BaseTrainer(ABC):
     """Base class for trainers."""
     def __init__(self,args,train_data: "pd.DataFrame",val_data: "pd.DataFrame" =None, **logger_kwargs) -> None:
         self.args = args
-        if args.log:
+        if args.logger:
             self.logger = Logger(args,**logger_kwargs)
         else:
             self.logger = None
