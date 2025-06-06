@@ -99,14 +99,14 @@ class BaseTrainer(ABC):
         for epoch in range(1,self.args.num_epoch+1):
             # Train Stage
             self.train_per_epoch(epoch)
-            # Val Stage (log cls metrics)
-            if self.val_loader is not None:
-                self.val_per_epoch(epoch)
             if self.logger:
+                # Val Stage (log cls metrics)
+                if self.val_loader is not None:
+                    self.val_per_epoch(epoch)
                 # Record HI
                 if self.record_HI_loader is not None:
                     self.record_per_epoch(epoch)
-                # Log results
+                    # Log results
                 self.logger.save_metrics(epoch)
                 self.logger.save_checkpoint(self.model, epoch)
 
@@ -137,21 +137,29 @@ class BaseTrainer(ABC):
                 self.logger.writer.add_scalar(f'{metric_name}/val',metric,epoch)
         return metric_result
 
-    def record_per_epoch(self,epoch: "int"):
+    def record_per_epoch(self,epoch: "int") -> dict:
         self.model.eval()
 
+        # Record HI
+        hi_dict = {}
+        for UUT,t,X,y_true in self.record_HI_loader:
+            if UUT in self.record_UUTs:
+                X = X.to(self.device)
+                hi = self.model(X).detach().numpy()
+                hi_dict[UUT] = hi
+
         # Plot selected HI
-        if epoch % self.args.record_freq == 0:
+        if self.logger and (epoch % self.args.record_freq == 0):
             fig = plt.figure(figsize=(10,5))
-            for UUT,t,X,y_true in self.record_HI_loader:
-                if UUT in self.record_UUTs:
-                    X = X.to(self.device)
-                    hi = self.model(X).detach().numpy()
-                    plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
+            for UUT in self.record_UUTs:
+                hi = hi_dict[UUT]
+                plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
             plt.legend()
             # plt.title(f'epoch:{epoch}')
             plt.tight_layout()
             self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
+
+        return hi_dict
 
 
 
@@ -197,57 +205,61 @@ class BaseRTFTrainer(BaseTrainer):
                 print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
 
     def record_per_epoch(self,epoch):
-        self.logger.record_histogram('theta/train',self.model.theta_train)
-
         self.model.eval()
 
+        # Record HI
         hi_dict = {}
-        # Test for normality
-        sig_list = sorted((0.01,0.05,0.10))
-        nt_summary = {} # 'epoch':epoch
         for UUT,t,X,y_true in self.record_HI_loader:
             X = X.to(self.device)
             hi,p = self.model(X)
-            hi = hi.detach().numpy()
-            hi_dict[UUT] = hi
+            hi_dict[UUT] = hi.detach().numpy()
+        if self.logger:
+            # Log theta dist
+            self.logger.record_histogram('theta/train',self.model.theta_train)
 
-            resInc = np.diff(hi,prepend=0)[10:]
-            nt_result = {
-                'KS': kstest(resInc,cdf='norm'),
-                'SW': shapiro(resInc),
-                'DP': normaltest(resInc),
-                'AD': anderson(resInc,dist='norm')
-            }
-            for test_name, test_result in nt_result.items():
-                if test_name == 'AD':
-                    for sig in sig_list:
-                        ad_idx = np.where(test_result.significance_level==sig*100)[0][0]
-                        critical_value = test_result.critical_values[ad_idx]
-                        statistic = test_result.statistic
-                        if statistic < critical_value:
-                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                        else:
-                            break
-                else:
-                    statistic, p_value = test_result
-                    for sig in sig_list:
-                        if p_value > sig:
-                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                        else:
-                            break
-        for k,v in nt_summary.items():
-            self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
+            # Test for normality
+            sig_list = sorted((0.01,0.05,0.10))
+            nt_summary = {} # 'epoch':epoch
+            for UUT,hi in hi_dict.items():
+                resInc = np.diff(hi,prepend=0)[10:]
+                nt_result = {
+                    'KS': kstest(resInc,cdf='norm'),
+                    'SW': shapiro(resInc),
+                    'DP': normaltest(resInc),
+                    'AD': anderson(resInc,dist='norm')
+                }
+                for test_name, test_result in nt_result.items():
+                    if test_name == 'AD':
+                        for sig in sig_list:
+                            ad_idx = np.where(test_result.significance_level==sig*100)[0][0]
+                            critical_value = test_result.critical_values[ad_idx]
+                            statistic = test_result.statistic
+                            if statistic < critical_value:
+                                nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                            else:
+                                break
+                    else:
+                        statistic, p_value = test_result
+                        for sig in sig_list:
+                            if p_value > sig:
+                                nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
+                            else:
+                                break
+            for k,v in nt_summary.items():
+                self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
 
-        # Plot selected HI
-        if epoch % self.args.record_freq == 0:
-            fig = plt.figure(figsize=(10,5))
-            for UUT in self.record_UUTs:
-                hi = hi_dict[UUT]
-                plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
-            plt.legend()
-            # plt.title(f'epoch:{epoch}')
-            plt.tight_layout()
-            self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
+            # Plot selected HI
+            if epoch % self.args.record_freq == 0:
+                fig = plt.figure(figsize=(10,5))
+                for UUT in self.record_UUTs:
+                    hi = hi_dict[UUT]
+                    plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
+                plt.legend()
+                # plt.title(f'epoch:{epoch}')
+                plt.tight_layout()
+                self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
+
+        return hi_dict
 
     def compute_loss(self, hi, p, y_true, UUT):
         cls_loss = self.args.cls_loss_weight * FocalLoss(p, y_true, alpha = self.args.FocalLoss_alpha, gamma = self.args.FocalLoss_gamma, reduction='mean')
@@ -263,7 +275,7 @@ class BaseRTFTrainer(BaseTrainer):
 
 
 
-class BaseTWTrainer(BaseTrainer):
+class BaseTWTrainer(BaseRTFTrainer):
     '''BaseTW Model Trainer'''
 
     def get_model(self):
@@ -306,57 +318,6 @@ class BaseTWTrainer(BaseTrainer):
 
             if (i+1) % self.args.print_freq == 0:
                 print(f'Train: Epoch {epoch} batch {i+1} Loss {total_loss.item():.6f}')
-
-    def record_per_epoch(self,epoch):
-        self.model.eval()
-
-        hi_dict = {}
-        # Test for normality
-        sig_list = sorted((0.01,0.05,0.10))
-        nt_summary = {} # 'epoch':epoch
-        for UUT,t,X,y_true in self.record_HI_loader:
-            X = X.to(self.device)
-            hi,p = self.model(X)
-            hi = hi.detach().numpy()
-            hi_dict[UUT] = hi
-
-            resInc = np.diff(hi)
-            nt_result = {
-                'KS': kstest(resInc,cdf='norm'),
-                'SW': shapiro(resInc),
-                'DP': normaltest(resInc),
-                'AD': anderson(resInc,dist='norm')
-            }
-            for test_name, test_result in nt_result.items():
-                if test_name == 'AD':
-                    for sig in sig_list:
-                        ad_idx = np.where(test_result.significance_level==sig*100)[0][0]
-                        critical_value = test_result.critical_values[ad_idx]
-                        statistic = test_result.statistic
-                        if statistic < critical_value:
-                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                        else:
-                            break
-                else:
-                    statistic, p_value = test_result
-                    for sig in sig_list:
-                        if p_value > sig:
-                            nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                        else:
-                            break
-        for k,v in nt_summary.items():
-            self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
-
-        # Plot selected HI
-        if epoch % self.args.record_freq == 0:
-            fig = plt.figure(figsize=(10,5))
-            for UUT in self.record_UUTs:
-                hi = hi_dict[UUT]
-                plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
-            plt.legend()
-            # plt.title(f'epoch:{epoch}')
-            plt.tight_layout()
-            self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
 
     def compute_loss(self, start, end, hi_pre, hi_cur, p_pre, p_cur, y_pre, y_cur, UUT):
         indice = self._UUT2idx(UUT)
