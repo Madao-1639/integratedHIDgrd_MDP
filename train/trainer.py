@@ -173,7 +173,7 @@ class BaseRTFTrainer(BaseTrainer):
     def get_model(self):
         self.model = BaseRTF(self.args, self.ls_dict.index)
         if self.args.load_model_fp:
-            self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
+            self.model.load_state_dict(torch.load(self.args.load_model_fp).state_dict())
         self.model.to(self.device)
         # example_input = torch.randn((self.args.input_size,20))
         # self.logger.writer.add_graph(self.model,example_input)
@@ -285,7 +285,7 @@ class BaseTWTrainer(BaseRTFTrainer):
     def get_model(self):
         self.model = BaseTW(self.args, self.ls_dict.index)
         if self.args.load_model_fp:
-            self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
+            self.model.load_state_dict(torch.load(self.args.load_model_fp).state_dict())
         self.model.to(self.device)
         # example_input = torch.randn((self.args.window_width,self.args.input_size,))
         # self.logger.writer.add_graph(self.model,example_input)
@@ -350,7 +350,7 @@ class SCTrainer(BaseTrainer):
     def get_model(self):
         self.model = SC_DNN(self.args)
         if self.args.load_model_fp:
-            self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
+            self.model.load_state_dict(torch.load(self.args.load_model_fp).state_dict())
         self.model.to(self.device)
         # example_input = torch.randn((self.args.input_size,))
         # self.logger.writer.add_graph(self.model,example_input)
@@ -426,7 +426,7 @@ class IntegratedTrainer(BaseTrainer):
     def get_model(self):
         self.model = Integrated_DNN_LSTM(self.args, self.ls_dict.index)
         if self.args.load_model_fp:
-            self.model.load_state_dict(torch.load(self.args.load_model_path).state_dict())
+            self.model.load_state_dict(torch.load(self.args.load_model_fp).state_dict())
         self.model.to(self.device)
         # example_input = torch.randn((self.args.input_size,20))
         # self.logger.writer.add_graph(self.model,example_input)
