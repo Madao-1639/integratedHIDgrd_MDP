@@ -57,12 +57,16 @@ class BaseTrainer(ABC):
             else:
                 record_HI_data_type = 'RTF'
             self.record_HI_loader = select_loader(record_HI_data,False,self.args,record_HI_data_type)
-            data_record_UUTs = record_HI_data['UUT'].unique()
-            args_record_UUTs = self.args.record_UUTs
-            if args_record_UUTs and all((data_record_UUTs==UUT).any() for UUT in args_record_UUTs):
-                self.record_UUTs = args_record_UUTs
-            else:
-                self.record_UUTs = np.random.choice(data_record_UUTs,size=5,replace=False)
+
+            if self.logger:
+                # Sample/Select UUTs to plot HI
+                data_record_UUTs = record_HI_data['UUT'].unique()
+                args_record_UUTs = self.args.record_UUTs
+                if args_record_UUTs and all((data_record_UUTs==UUT).any() for UUT in args_record_UUTs):
+                    self.record_UUTs = args_record_UUTs
+                else:
+                    record_num_UUTs = min(data_record_UUTs.size,self.args.record_num_UUTs)
+                    self.record_UUTs = np.random.choice(data_record_UUTs,size=record_num_UUTs,replace=False)
         else:
             self.record_HI_loader = None
 

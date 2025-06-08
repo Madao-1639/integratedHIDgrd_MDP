@@ -42,7 +42,8 @@ def parse_common_args(parser):
     parser.add_argument('--save_suffix', type=str, help='Comment for model')
     parser.add_argument('--record_HI', type=str, choices = [None,'train','val','all'])
     parser.add_argument('--record_UUTs', type=int, nargs='*')
-    parser.add_argument('--result_dir', type=str)
+    parser.add_argument('--record_num_UUTs', type=int, default=5)
+    parser.add_argument('--result_dir', type=str, defalut='result')
     parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--seed', type=int, default=42)
     return parser
@@ -109,12 +110,9 @@ def preprocess_common_args(args):
     args.time_str = time.strftime(r"%Y%m%d-%H%M%S", time.localtime())
     args.input_size = 21 - len(args.drop_vars) if args.drop_vars else 21
 
-    if not args.result_dir:
-        if not os.path.exists('result'):
-            os.mkdir('result')
-        args.result_dir = os.path.join('result', args.model_name + '_' + args.time_str)
     if not os.path.exists(args.result_dir):
         os.mkdir(args.result_dir)
+        args.result_dir = os.path.join(args.result_dir, args.model_name + '_' + args.time_str)
 
 def preprocess_train_args(args):
     if not os.path.exists('checkpoint'):
