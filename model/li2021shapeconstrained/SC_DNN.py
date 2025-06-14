@@ -10,7 +10,7 @@ class SC_DNN(nn.Module):
         super().__init__()
         dnn_seq = []
         input_size = args.input_size
-        for hidden_size in args.SC_dnn_hidden_sizes:
+        for hidden_size in args.dnn_hidden_sizes:
             dnn_seq.append(nn.Linear(input_size, hidden_size))
             dnn_seq.append(nn.ReLU())
             input_size = hidden_size

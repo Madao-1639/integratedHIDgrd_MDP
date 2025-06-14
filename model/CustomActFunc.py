@@ -7,8 +7,6 @@ def select_activate(activate_type,**kw_activate):
         return SigmoidExpBias(**kw_activate)
     elif activate_type == 'SigmoidLinear':
         return SigmoidLinear(**kw_activate)
-    elif activate_type == 'SigmoidLinearReLU':
-        return SigmoidLinearReLU(**kw_activate)
     elif activate_type == 'SigmoidLeakyReLU':
         return SigmoidLeakeyReLU(**kw_activate)
     elif activate_type == 'SigmoidELU':
@@ -48,21 +46,6 @@ class SigmoidLeakeyReLU(nn.Module):
 
     def forward(self,x):
         return F.sigmoid(F.leaky_relu(x,self.alpha))
-
-
-
-class SigmoidLinearReLU(nn.Module):
-    def __init__(self,weight=None,bias=0):
-        super().__init__()
-        if weight is None:
-            self.weight = nn.Parameter(torch.FloatTensor(size=(1,)))
-            nn.init.uniform_(self.weight)
-        else:
-            self.weight = nn.Parameter(torch.FloatTensor([weight]))
-        self.bias = nn.Parameter(torch.FloatTensor([bias]))
-    
-    def forward(self,x):
-        return F.sigmoid(F.relu(self.weight*x+self.bias))
 
 
 

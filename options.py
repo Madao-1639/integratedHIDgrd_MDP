@@ -7,20 +7,12 @@ def parse_common_args(parser):
     # Model setting
     parser.add_argument('--model_type', type=str, default='Base', choices=['Base','SC','Integrated'])
     parser.add_argument('--task', type=str, default='reg', choices=['cls','reg'], help='"cls" for classification, "reg" for regression')
-        # Base
-    parser.add_argument('--Base_lstm_hidden_size', type=int, default=16)
-    parser.add_argument('--Base_num_lstm_layers', type=int, default=1)
-    parser.add_argument('--Base_lstm_dropout', type=float, default=0.0)
-    parser.add_argument('--Base_dnn_hidden_sizes', nargs='+', type=int, default=[16])
-    parser.add_argument('--Base_activate', type=str, default='SigmoidExpBias', choices=['Sigmoid','SigmoidExpBias','SigmoidLinear','SigmoidLinearReLU','SigmoidLeakyReLU','SigmoidELU'])
-    parser.add_argument('--Base_cls_thres', type=float, default=0.5)
-        # SC
-    parser.add_argument('--SC_dnn_hidden_sizes', nargs='+', type=int, default=[5,3])
-        # Integrated
-    parser.add_argument('--Integrated_dnn_hidden_sizes', nargs='+', type=int, default=[3])
-    parser.add_argument('--Integrated_lstm_hidden_size', type=int, default=3)
-    parser.add_argument('--Integrated_num_lstm_layers', type=int, default=1)
-    parser.add_argument('--Integrated_lstm_dropout', type=float, default=0.0)
+    parser.add_argument('--lstm_hidden_size', type=int, default=16)
+    parser.add_argument('--num_lstm_layers', type=int, default=1)
+    parser.add_argument('--lstm_dropout', type=float, default=0.0)
+    parser.add_argument('--dnn_hidden_sizes', nargs='+', type=int, default=[16])
+    parser.add_argument('--activate', type=str, default='SigmoidExpBias', choices=['Sigmoid','SigmoidExpBias','SigmoidLinear','SigmoidLeakyReLU','SigmoidELU'])
+    parser.add_argument('--cls_thres', type=float, default=0.5)
 
     # Data Preprocessing
     parser.add_argument('--drop_vars', nargs='*', type=int, default=[1,5,6,10,16,18,19], help='Drop duplicate variables')
@@ -43,7 +35,7 @@ def parse_common_args(parser):
     parser.add_argument('--record_HI', type=str, choices = [None,'train','val','all'])
     parser.add_argument('--record_UUTs', type=int, nargs='*')
     parser.add_argument('--record_num_UUTs', type=int, default=5)
-    parser.add_argument('--result_dir', type=str, defalut='result')
+    parser.add_argument('--result_dir', type=str, default='result')
     parser.add_argument('--use_cuda', action='store_true')
     parser.add_argument('--seed', type=int, default=42)
     return parser

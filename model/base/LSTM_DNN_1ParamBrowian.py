@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .CustomActvateFunction import select_activate
+from ..CustomActFunc import select_activate
 
 
 
@@ -8,19 +8,19 @@ class BaseRTF(nn.Module):
     def __init__(self, args, train_UUTs, mu0=1, sigma0=1, sigma_square=1):
         super().__init__()
         self.lstm = nn.LSTM(
-            args.input_size, args.Base_lstm_hidden_size, args.Base_num_lstm_layers,
-            dropout=args.Base_lstm_dropout, batch_first=True
+            args.input_size, args.lstm_hidden_size, args.num_lstm_layers,
+            dropout=args.lstm_dropout, batch_first=True
             )
         dnn_seq = []
-        input_size = args.Base_lstm_hidden_size
-        for hidden_size in args.Base_dnn_hidden_sizes:
+        input_size = args.lstm_hidden_size
+        for hidden_size in args.dnn_hidden_sizes:
             dnn_seq.append(nn.Linear(input_size, hidden_size))
             dnn_seq.append(nn.ReLU())
             input_size = hidden_size
         dnn_seq.append(nn.Linear(input_size,1))
         self.dnn = nn.Sequential(*dnn_seq)
-        self.activate = select_activate(args.Base_activate)
-        self.cls_thres = args.Base_cls_thres
+        self.activate = select_activate(args.activate)
+        self.cls_thres = args.cls_thres
 
         # 1ParamBrownian
         self.train_UUT_dict = {UUT:i for i,UUT in enumerate(train_UUTs)}

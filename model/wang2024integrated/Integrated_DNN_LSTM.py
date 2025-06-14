@@ -9,7 +9,7 @@ class Integrated_DNN_LSTM(nn.Module):
         # HI construction
         dnn_seq = []
         input_size = args.input_size
-        for hidden_size in args.Integrated_dnn_hidden_sizes:
+        for hidden_size in args.dnn_hidden_sizes:
             dnn_seq.append(nn.Linear(input_size, hidden_size))
             dnn_seq.append(nn.Softplus())
             input_size = hidden_size
@@ -19,11 +19,11 @@ class Integrated_DNN_LSTM(nn.Module):
         # Degradation model
         self.tmax = 500
         self.lstm = nn.LSTM(
-            1, args.Integrated_lstm_hidden_size, args.Integrated_num_lstm_layers,
-            dropout=args.Integrated_lstm_dropout, batch_first=True
+            1, args.lstm_hidden_size, args.num_lstm_layers,
+            dropout=args.lstm_dropout, batch_first=True
         )
         self.train_UUT_dict = {UUT:i for i,UUT in enumerate(train_UUTs)}
-        self.Gamma_train = nn.Parameter(torch.empty(len(train_UUTs),args.Integrated_lstm_hidden_size).normal_(mu0,sigma0))
+        self.Gamma_train = nn.Parameter(torch.empty(len(train_UUTs),args.lstm_hidden_size).normal_(mu0,sigma0))
 
         self.cls_model = LogisticRegression(class_weight='balanced',)
 
