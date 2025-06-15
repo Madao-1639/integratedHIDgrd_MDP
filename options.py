@@ -5,7 +5,7 @@ import time
 
 def parse_common_args(parser):
     # Model setting
-    parser.add_argument('--model_type', type=str, default='Base', choices=['Base','SC','Integrated'])
+    parser.add_argument('--model_type', type=str, default='Base', choices=['Base','SC','Integrated','MS'])
     parser.add_argument('--task', type=str, default='reg', choices=['cls','reg'], help='"cls" for classification, "reg" for regression')
     parser.add_argument('--lstm_hidden_size', type=int, default=16)
     parser.add_argument('--num_lstm_layers', type=int, default=1)
@@ -13,6 +13,8 @@ def parse_common_args(parser):
     parser.add_argument('--dnn_hidden_sizes', nargs='+', type=int, default=[16])
     parser.add_argument('--activate', type=str, default='SigmoidExpBias', choices=['Sigmoid','SigmoidExpBias','SigmoidLinear','SigmoidLeakyReLU','SigmoidELU'])
     parser.add_argument('--cls_thres', type=float, default=0.5)
+        # Multi-Stage
+    parser.add_argument('--MS_fix_point', type=int,default=70, help='Fix turning point')
 
     # Data Preprocessing
     parser.add_argument('--drop_vars', nargs='*', type=int, default=[1,5,6,10,16,18,19], help='Drop duplicate variables')

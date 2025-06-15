@@ -5,14 +5,13 @@ from torch.optim import Adam
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import kstest,shapiro,normaltest,anderson
 from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score
-import optuna
 
 from utils.data import select_loader
-from model import BaseRTF, BaseTW, SC_DNN, Integrated_DNN_LSTM
+from model import BaseRTF, BaseTW, SC_DNN, Integrated_DNN_LSTM, MSRTF#, MSTW
 from loss import FocalLoss,MVFLoss,MONLoss,CONLoss
 from utils.logger import Logger
+from utils.utils import test4norm
 
 
 
@@ -222,33 +221,7 @@ class BaseRTFTrainer(BaseTrainer):
             self.logger.record_histogram('theta/train',self.model.theta_train)
 
             # Test for normality
-            sig_list = sorted((0.01,0.05,0.10))
-            nt_summary = {} # 'epoch':epoch
-            for UUT,hi in hi_dict.items():
-                resInc = np.diff(hi,prepend=0)[10:]
-                nt_result = {
-                    'KS': kstest(resInc,cdf='norm'),
-                    'SW': shapiro(resInc),
-                    'DP': normaltest(resInc),
-                    'AD': anderson(resInc,dist='norm')
-                }
-                for test_name, test_result in nt_result.items():
-                    if test_name == 'AD':
-                        for sig in sig_list:
-                            ad_idx = np.where(test_result.significance_level==sig*100)[0][0]
-                            critical_value = test_result.critical_values[ad_idx]
-                            statistic = test_result.statistic
-                            if statistic < critical_value:
-                                nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                            else:
-                                break
-                    else:
-                        statistic, p_value = test_result
-                        for sig in sig_list:
-                            if p_value > sig:
-                                nt_summary[f'{test_name} pass({sig:.0%})'] = nt_summary.get(f'{test_name} pass({sig:.0%})',0) + 1
-                            else:
-                                break
+            nt_summary = test4norm(hi_dict,sig_list=(0.01,0.05,0.10))
             for k,v in nt_summary.items():
                 self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
 
@@ -479,3 +452,48 @@ class IntegratedTrainer(BaseTrainer):
             'total_loss': total_loss
         }
         return loss
+    
+
+class MSRTFTrainer(BaseRTFTrainer):
+    '''MSRTF Model Trainer'''
+
+    def get_model(self):
+        self.model = MSRTF(args=self.args, train_UUTs=self.ls_dict.index)
+        if self.args.load_model_fp:
+            self.model.load_state_dict(torch.load(self.args.load_model_fp, weights_only=False))
+        self.model.to(self.device)
+        # example_input = torch.randn((self.args.input_size,20))
+        # self.logger.writer.add_graph(self.model,example_input)
+
+    def record_per_epoch(self,epoch):
+        self.model.eval()
+
+        # Record HI
+        hi_dict = {}
+        deg_hi_dict = {}
+        for UUT,t,X,y_true in self.record_HI_loader:
+            X = X.to(self.device)
+            hi,p = self.model(X)
+            hi_dict[UUT] = hi.detach().numpy()
+            deg_hi_dict[UUT] = self.model.transform_deg_hi(hi).detach().numpy()
+        if self.logger:
+            # Log theta dist
+            self.logger.record_histogram('theta/train',self.model.theta_train)
+
+            # Test for normality
+            nt_summary = test4norm(deg_hi_dict,sig_list=(0.01,0.05,0.10))
+            for k,v in nt_summary.items():
+                self.logger.record_scalars(f'NomalTest/{self.args.record_HI}',k,v)
+
+            # Plot selected HI
+            if epoch % self.args.record_freq == 0:
+                fig = plt.figure(figsize=(10,5))
+                for UUT in self.record_UUTs:
+                    hi = hi_dict[UUT]
+                    plt.plot(hi,'-',lw=0.5,alpha=0.75,label=UUT)
+                plt.legend()
+                # plt.title(f'epoch:{epoch}')
+                plt.tight_layout()
+                self.logger.writer.add_figure(f'HI/{self.args.record_HI}',fig,epoch)
+
+        return hi_dict
